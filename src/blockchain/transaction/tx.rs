@@ -134,7 +134,7 @@ impl Tx {
             // Use the same tx build pattern as signing
             let prev_tx = prev_txs
                 .get(&input.tx_id)
-                .expect("[Tx::sign] ERROR: Previous tx missing!");
+                .expect("[Tx::verify] ERROR: Previous tx missing!");
             let prev_output = &prev_tx.outputs[input.out as usize];
             tx_copy.inputs[i as usize].pub_key = prev_output.pub_key_hash.to_vec();
             tx_copy.id = tx_copy.hash();
@@ -148,7 +148,7 @@ impl Tx {
                 .expect("[Tx::verify] Invalid public key format!");
 
             // Verify the signature
-            let msg = Message::try_from(&tx_copy.id).expect("[Tx::sign] Invalid hash!");
+            let msg = Message::try_from(&tx_copy.id).expect("[Tx::verify] Invalid hash!");
             if secp.verify_ecdsa(&msg, &sig, &pub_key).is_err() {
                 return false;
             }
@@ -173,7 +173,7 @@ struct TxOutput {
 
 impl TxOutput {
     /// Creates a new tx output given a value and a recipient address.
-    pub fn new(value: u64, addr: &Address) -> TxOutput {
+    pub fn new(value: u64, addr: &Address) -> Self {
         let mut txo = TxOutput {
             value,
             pub_key_hash: [0; 20],
@@ -205,13 +205,6 @@ impl TxInput {
     pub fn uses_key(&self, addr: &Address) -> bool {
         let locking_hash = self.pub_key;
         return locking_hash == addr.pub_key_hash();
-    }
-
-    /// Create a pub key hash from a given public key
-    fn public_key_hash(pub_key: &PublicKey) -> [u8; 20] {
-        let sha256_hash = Sha256::digest(pub_key.serialize());
-        let ripemd160_hash = Ripemd160::digest(sha256_hash);
-        ripemd160_hash.try_into().expect("Hash should be 20 bytes")
     }
 }
 

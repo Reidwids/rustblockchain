@@ -1,13 +1,13 @@
 mod blockchain {
     mod block;
     mod transaction {
-        mod transaction;
         mod tx;
         mod utxo;
     }
 }
-mod wallet {
+mod ownership {
     pub mod address;
+    pub mod wallet;
 }
 
 fn main() {
