@@ -29,14 +29,14 @@ impl Address {
         let version = decoded_addr[0];
 
         // Extract public key hash (next 20 bytes)
-        let pub_key_hash = &decoded_addr[1..21]; // The public key hash is 20 bytes
-        let mut pub_key_hash_arr = [0u8; 20];
-        pub_key_hash_arr.copy_from_slice(pub_key_hash);
+        let pub_key_hash: [u8; 20] = decoded_addr[1..21]
+            .try_into()
+            .expect("[Address::new_from_str] ERROR: Invalid pub key hash"); // The public key hash is 20 bytes
 
         // Extract checksum (last 4 bytes)
-        let checksum = &decoded_addr[decoded_addr.len() - 4..];
-        let mut checksum_arr = [0u8; 4];
-        checksum_arr.copy_from_slice(checksum);
+        let checksum: [u8; 4] = decoded_addr[decoded_addr.len() - 4..]
+            .try_into()
+            .expect("[Address::new_from_str] ERROR: Invalid checksum");
 
         let target_checksum = Address::calculate_checksum(version, &pub_key_hash);
         if target_checksum != checksum {
@@ -44,14 +44,14 @@ impl Address {
         }
 
         Address {
-            pub_key_hash: pub_key_hash_arr,
+            pub_key_hash,
             version,
-            checksum: checksum_arr,
+            checksum,
         }
     }
 
     pub fn new_from_key(pub_key: PublicKey) -> Self {
-        let pub_key_hash = Address::hash_pub_key(&pub_key);
+        let pub_key_hash = hash_pub_key(&pub_key);
         let checksum = Address::calculate_checksum(VERSION, &pub_key_hash);
 
         Address {
@@ -61,16 +61,7 @@ impl Address {
         }
     }
 
-    /// Hashes a public key using SHA-256 followed by RIPEMD-160
-    fn hash_pub_key(pub_key: &PublicKey) -> [u8; 20] {
-        let sha256_hash = Sha256::digest(&pub_key.serialize());
-        let ripemd160_hash = Ripemd160::digest(&sha256_hash);
-        ripemd160_hash
-            .try_into()
-            .expect("[Address::hash_pub_key] ERROR: Hash should be 20 bytes")
-    }
-
-    pub fn get_pub_key_hash(&self) -> &[u8; 20] {
+    pub fn pub_key_hash(&self) -> &[u8; 20] {
         &self.pub_key_hash
     }
 
@@ -106,4 +97,13 @@ impl Address {
 
         full_addr.to_base58()
     }
+}
+
+/// Hashes a public key using SHA-256 followed by RIPEMD-160
+pub fn hash_pub_key(pub_key: &PublicKey) -> [u8; 20] {
+    let sha256_hash = Sha256::digest(&pub_key.serialize());
+    let ripemd160_hash = Ripemd160::digest(&sha256_hash);
+    ripemd160_hash
+        .try_into()
+        .expect("[Address::hash_pub_key] ERROR: Hash should be 20 bytes")
 }

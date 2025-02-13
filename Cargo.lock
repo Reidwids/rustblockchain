@@ -439,6 +439,7 @@ dependencies = [
  "ripemd",
  "rocksdb",
  "secp256k1",
+ "serde",
  "sha2",
 ]
 

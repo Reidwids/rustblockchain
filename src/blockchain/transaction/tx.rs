@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 
-use crate::wallet::address::Address;
-use rocksdb::Transaction;
-use secp256k1::ecdsa::{SerializedSignature, Signature};
+use secp256k1::ecdsa::Signature;
 use secp256k1::rand::RngCore;
 use secp256k1::{rand, Message, PublicKey, Secp256k1, SecretKey};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::fmt::Debug;
+
+use crate::ownership::address::{hash_pub_key, Address};
 
 /** Constants **/
-const COINBASE_REWARD: i64 = 20;
+const COINBASE_REWARD: u64 = 20;
 
-/** Transaction **/
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Tx {
     id: [u8; 32], // ID of the transaction
     inputs: Vec<TxInput>,
@@ -34,21 +35,27 @@ impl Tx {
     pub fn to_string(&self) -> String {
         let mut lines: Vec<String> = Vec::new();
 
-        lines.push(format!("--- Transaction {:x}:", hex::encode(self.id)));
+        lines.push(format!("--- Transaction {}:", hex::encode(self.id)));
 
         for (i, input) in self.inputs.iter().enumerate() {
             lines.push(format!("Input # {}:", i));
-            lines.push(format!("  Input TxID: {:x}", hex::encode(input.id)));
+            lines.push(format!("  Input TxID: {}", hex::encode(input.tx_id)));
             lines.push(format!("  Out: {}", input.out));
-            lines.push(format!("  Signature: {:x}", hex::encode(&input.signature)));
-            lines.push(format!("  PubKey: {:x}", hex::encode(&input.pub_key)));
+            lines.push(format!(
+                "  Signature: {}",
+                hex::encode(input.signature.serialize_compact())
+            ));
+            lines.push(format!(
+                "  PubKey: {}",
+                hex::encode(input.pub_key.serialize())
+            ));
         }
 
         for (i, output) in self.outputs.iter().enumerate() {
             lines.push(format!("Output {}:", i));
             lines.push(format!("  Value: {}", output.value));
             lines.push(format!(
-                "  PubKeyHash: {:x}",
+                "  PubKeyHash: {}",
                 hex::encode(&output.pub_key_hash)
             ));
         }
@@ -58,29 +65,34 @@ impl Tx {
 
     /// Returns a copy of the given Tx without a pub key or signature
     pub fn trimmed_copy(&self) -> Tx {
-        let inputs: Vec<TxInput>;
-        let outputs: Vec<TxInput>;
+        let mut trimmed_inputs: Vec<TxInput> = vec![];
+        let mut trimmed_outputs: Vec<TxOutput> = vec![];
 
-        for (i, input) in self.inputs.iter().enumerate() {
-            inputs.push(TxInput {
+        let secp = Secp256k1::new();
+        let dummy_priv_key = SecretKey::from_slice(&[1u8; 32])
+            .expect("[Tx::trimmed_copy] ERROR: Failed to trim pub key");
+
+        for input in &self.inputs {
+            trimmed_inputs.push(TxInput {
                 tx_id: input.tx_id,
                 out: input.out,
-                signature: vec![],
-                pub_key: vec![],
+                signature: Signature::from_compact(&[0u8; 64])
+                    .expect("[Tx::trimmed_copy] ERROR: Failed to trim signature"),
+                pub_key: PublicKey::from_secret_key(&secp, &dummy_priv_key),
             })
         }
 
-        for (i, output) in self.outputs.iter().enumerate() {
-            outputs.push(TxOutput {
+        for output in &self.outputs {
+            trimmed_outputs.push(TxOutput {
                 value: output.value,
                 pub_key_hash: output.pub_key_hash,
             })
         }
 
         Tx {
-            id: self.id,
-            inputs,
-            outputs,
+            id: [0u8; 32], // Empty ID to be filled after hashing
+            inputs: trimmed_inputs,
+            outputs: trimmed_outputs,
         }
     }
 
@@ -90,66 +102,64 @@ impl Tx {
     }
 
     /// Sign a tx with a given private key and
-    pub fn sign(&mut self, priv_key: &SecretKey, prev_txs: &HashMap<[u8; 32], Tx>) {
+    pub fn sign(&mut self, priv_key: &SecretKey) {
         if self.is_coinbase() {
             return; // Coinbase txs don't need to be signed
         }
 
         let secp = Secp256k1::new();
+        let tx_copy_base = self.trimmed_copy();
 
         // Loop through inputs from original tx so we can append a signature
-        for (i, input) in &mut self.inputs.iter().enumerate() {
+
+        // Set the ID to the hash of the tx. When we verify, this will be used for pubkey comparison
+        for input in &mut self.inputs {
             // Build a copy for hashing that does not include the pubkey or signature
-            let mut tx_copy = self.trimmed_copy();
+            let mut tx_copy = tx_copy_base.trimmed_copy();
 
-            // Find the prev tx corresponding to the tx input
-            let prev_tx = prev_txs
-                .get(&input.tx_id) // tx id of the input represents a previous output
-                .expect("[Tx::sign] ERROR: Previous tx missing!");
-
-            // Resolve the output for the found tx
-            let prev_output = &prev_tx.outputs[input.out as usize];
-
-            // Set pubkey, so our hash includes the sender pubkey
-            tx_copy.inputs[i as usize].pub_key = prev_output.pub_key_hash.to_vec();
-
-            // Set the ID to the hash of the tx. When we verify, this will be used for pubkey comparison
             tx_copy.id = tx_copy.hash();
-            let msg = Message::try_from(&tx_copy.id).expect("[Tx::sign] Invalid hash!");
+            let msg = Message::from_digest(tx_copy.id);
             let sig = secp.sign_ecdsa(&msg, priv_key);
 
             // Set the sig of the original input
-            input.signature = sig.serialize_compact().to_vec();
+            input.signature = Signature::from_compact(&sig.serialize_compact())
+                .expect("[Tx::sign] ERROR: Failed to serialize signature");
+            // Note we assume here that the public key has already been added to the tx
         }
     }
 
     pub fn verify(&self, prev_txs: &HashMap<[u8; 32], Tx>) -> bool {
+        // Coinbase txs do not need standard verification
         if self.is_coinbase() {
             return true;
         }
 
-        for (i, input) in &mut self.inputs.iter().enumerate() {
+        for input in &self.inputs {
             let mut tx_copy = self.trimmed_copy();
 
-            // Use the same tx build pattern as signing
+            // Verify that the prev output pub key hash matches the pub key of the input
             let prev_tx = prev_txs
                 .get(&input.tx_id)
                 .expect("[Tx::verify] ERROR: Previous tx missing!");
             let prev_output = &prev_tx.outputs[input.out as usize];
-            tx_copy.inputs[i as usize].pub_key = prev_output.pub_key_hash.to_vec();
+            // Recompute the pub key hash from the input's public key
+            let computed_pub_key_hash = hash_pub_key(&input.pub_key);
+            // Check if the computed pub key hash matches the expected one
+            if computed_pub_key_hash != prev_output.pub_key_hash {
+                println!("[Tx::verify] ERROR: PubKey does not match PubKeyHash!");
+                return false;
+            }
+
+            // Recompute the tx id from the trimmed copy. If the id differs from
+            // the signed tx id, the signature verification will fail
             tx_copy.id = tx_copy.hash();
 
-            // Reconstruct sig
-            let sig = Signature::from_compact(&input.signature)
-                .expect("[Tx::verify] Invalid signature format!");
-
-            // Deserialize the public key
-            let pub_key = PublicKey::from_slice(&input.pub_key)
-                .expect("[Tx::verify] Invalid public key format!");
-
-            // Verify the signature
-            let msg = Message::try_from(&tx_copy.id).expect("[Tx::verify] Invalid hash!");
-            if secp.verify_ecdsa(&msg, &sig, &pub_key).is_err() {
+            // Verify the signature was created by signing the tx is with the given pub key
+            let msg = Message::from_digest(tx_copy.id);
+            if Secp256k1::new()
+                .verify_ecdsa(&msg, &input.signature, &input.pub_key)
+                .is_err()
+            {
                 return false;
             }
         }
@@ -165,7 +175,7 @@ struct TxOutputs {
     outputs: Vec<TxOutput>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct TxOutput {
     value: u64,             // Value of output tokens in the tx. Outputs cannot be split
     pub_key_hash: [u8; 20], // Recipient pub key (Sha256 + Ripemd160). Locks the output so it can only be included in a future input by the output author.
@@ -193,6 +203,7 @@ impl TxOutput {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct TxInput {
     tx_id: [u8; 32],      // ID of the transaction the output is inside of
     out: u32,             // Index that the output appears within the referenced transaction
@@ -203,43 +214,44 @@ struct TxInput {
 impl TxInput {
     /// Test if a given address matches the locking pub key hash of the tx input
     pub fn uses_key(&self, addr: &Address) -> bool {
-        let locking_hash = self.pub_key;
-        return locking_hash == addr.pub_key_hash();
+        let locking_hash = hash_pub_key(&self.pub_key);
+        return locking_hash == *addr.pub_key_hash();
     }
 }
 
 /// Create the coinbase tx
 pub fn coinbase_tx(to: Address) -> Tx {
-    // Create random data for the tx
-    let mut rand_data = [0u8; 24];
+    // Coinbase txs will contain an arbitrary in, since there is no previous out
+    let mut rand_data = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut rand_data);
 
-    let data = hex::encode(rand_data);
+    // Create a random ephemeral pubkey and signature
+    let secp = Secp256k1::new();
+    let secret_key = SecretKey::new(&mut rand::thread_rng());
+    let msg = Message::from_digest(rand_data);
+    let signature = secp.sign_ecdsa(&msg, &secret_key);
 
-    // There are no prev tx ins, so make a random instance
+    // Create the dummy in tx
     let tx_in = vec![TxInput {
         tx_id: [0u8; 32],
         out: u32::MAX,
-        signature: rand_data.to_vec(),
-        pub_key: vec![],
+        signature,
+        pub_key: PublicKey::from_secret_key(&secp, &secret_key),
     }];
 
-    // Create the tx out with the creators pub key hash
+    // Create the tx out with the creator's pub key hash
     let tx_out = vec![TxOutput {
         value: COINBASE_REWARD, // Reward for coinbase tx is static
-        pub_key_hash: to.pub_key_hash(),
+        pub_key_hash: *to.pub_key_hash(),
     }];
 
-    // Create the tx with empty id
+    // Create the tx with an empty id, and fill it with the tx hash
     let mut tx = Tx {
         id: [0u8; 32],
         inputs: tx_in,
         outputs: tx_out,
     };
-
-    // Create the id from the hash
+    // Note that the coinbase tx hash is irrelevant, since we don't verify the coinbase tx.
     tx.id = tx.hash();
-
-    // Return the tx
     tx
 }
