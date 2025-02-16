@@ -1,6 +1,7 @@
 use std::{
-    fs::OpenOptions,
+    fs::{create_dir_all, OpenOptions},
     io::{Read, Write},
+    path::Path,
 };
 
 use uuid::Uuid;
@@ -9,6 +10,13 @@ const NODE_PATH: &str = "./data/node.data";
 
 /// Get the local node ID. Saves locally, and will a new instance if one does not already exist
 pub fn get_node_id() -> Uuid {
+    let path = Path::new(NODE_PATH);
+
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent)
+            .expect("[node::get_node_id] ERROR: Failed to create parent directory");
+    }
+
     // Get or create local node ID store
     let mut file = OpenOptions::new()
         .read(true)

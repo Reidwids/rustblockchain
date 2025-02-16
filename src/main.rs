@@ -1,3 +1,5 @@
+use cli::cli::Cli;
+
 mod blockchain {
     mod block;
     mod transaction {
@@ -10,7 +12,11 @@ mod ownership {
     pub mod node;
     pub mod wallet;
 }
+mod cli {
+    pub mod cli;
+    pub mod handlers;
+}
 
 fn main() {
-    println!("Hello, world!");
+    Cli::run();
 }
