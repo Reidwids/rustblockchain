@@ -7,6 +7,7 @@ mod blockchain {
 }
 mod ownership {
     pub mod address;
+    pub mod node;
     pub mod wallet;
 }
 

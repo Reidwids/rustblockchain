@@ -87,7 +87,7 @@ impl Address {
     }
 
     /// Concat the address components into a full base58 encoded address
-    pub fn get_address(&self) -> String {
+    pub fn get_full_address(&self) -> String {
         let full_addr = [
             vec![self.version],
             self.pub_key_hash.to_vec(),
