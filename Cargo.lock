@@ -253,6 +253,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "dCoin"
+version = "0.1.0"
+dependencies = [
+ "base58",
+ "bincode",
+ "clap",
+ "hex",
+ "ripemd",
+ "rocksdb",
+ "secp256k1",
+ "serde",
+ "sha2",
+ "uuid",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -553,22 +569,6 @@ checksum = "26ec73b20525cb235bad420f911473b69f9fe27cc856c5461bccd7e4af037f43"
 dependencies = [
  "libc",
  "librocksdb-sys",
-]
-
-[[package]]
-name = "rustblockchain"
-version = "0.1.0"
-dependencies = [
- "base58",
- "bincode",
- "clap",
- "hex",
- "ripemd",
- "rocksdb",
- "secp256k1",
- "serde",
- "sha2",
- "uuid",
 ]
 
 [[package]]

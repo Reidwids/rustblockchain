@@ -16,7 +16,7 @@ mod cli {
     pub mod cli;
     pub mod handlers;
 }
-
+pub const DB_PATH: &str = "./db";
 fn main() {
     Cli::run();
 }
