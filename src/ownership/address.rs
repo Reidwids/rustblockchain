@@ -3,6 +3,7 @@ use base58::ToBase58;
 use ripemd::Ripemd160;
 use secp256k1::PublicKey;
 use sha2::{Digest, Sha256};
+use std::fmt::Write;
 
 const CHECKSUM_LENGTH: u8 = 4;
 const VERSION: u8 = 0;
@@ -107,4 +108,12 @@ pub fn hash_pub_key(pub_key: &PublicKey) -> [u8; 20] {
     ripemd160_hash
         .try_into()
         .expect("[Address::hash_pub_key] ERROR: Hash should be 20 bytes")
+}
+
+pub fn bytes_to_hex_string(bytes: &[u8]) -> String {
+    let mut hex_string = String::new();
+    for byte in bytes {
+        write!(hex_string, "{:02x}", byte).unwrap(); // {:02x} formats each byte as hex
+    }
+    hex_string
 }

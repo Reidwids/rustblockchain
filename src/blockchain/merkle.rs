@@ -1,10 +1,10 @@
 use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone)]
-struct MerkleNode {
+pub struct MerkleNode {
     left: Option<Box<MerkleNode>>,
     right: Option<Box<MerkleNode>>,
-    hash: [u8; 32],
+    pub hash: [u8; 32],
 }
 impl MerkleNode {
     fn new(
@@ -42,12 +42,12 @@ impl MerkleNode {
 /// check the validity of a tx without having to check every transaction, or even check the blocks themselves.
 /// A tree of hashes is built, where the leaf nodes are hashes of data (transactions), and the parent nodes are hashes
 /// of the concatenation of the child hashes. The root node therefore represents all data in the blockchain.
-struct MerkleTree {
-    root: Option<Box<MerkleNode>>,
+pub struct MerkleTree {
+    pub root: Box<MerkleNode>,
 }
 
 impl MerkleTree {
-    fn new(data: Vec<Vec<u8>>) -> MerkleTree {
+    pub fn new(data: Vec<Vec<u8>>) -> MerkleTree {
         // Each tx will represent a leaf node. We must first gather all leaf nodes
         // to construct the tree from the bottom up.
         let mut nodes: Vec<Box<MerkleNode>> = data
@@ -89,7 +89,7 @@ impl MerkleTree {
 
         // Loop stops after constructing the root node, since there would only be 1 parent created for the level.
         MerkleTree {
-            root: Some(nodes.remove(0)),
+            root: nodes.remove(0),
         }
     }
 }
