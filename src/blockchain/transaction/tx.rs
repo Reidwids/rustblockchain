@@ -13,7 +13,7 @@ use crate::ownership::address::{hash_pub_key, Address};
 const COINBASE_REWARD: u64 = 20;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct Tx {
+pub struct Tx {
     id: [u8; 32], // ID of the transaction
     inputs: Vec<TxInput>,
     outputs: Vec<TxOutput>,

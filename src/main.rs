@@ -1,10 +1,11 @@
 use cli::cli::Cli;
 
 mod blockchain {
-    mod block;
-    mod transaction {
-        mod tx;
-        mod utxo;
+    pub mod block;
+    pub mod merkle;
+    pub mod transaction {
+        pub mod tx;
+        pub mod utxo;
     }
 }
 mod ownership {

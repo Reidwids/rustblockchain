@@ -69,6 +69,7 @@ impl Address {
     fn calculate_checksum(version: u8, pub_key_hash: &[u8; 20]) -> [u8; 4] {
         // The checksum helps prevent typos or address corruption.
         // When decoding an address, we recompute the checksum and compare it with the stored one
+        // to ensure address integrity
 
         // Hash the version & pub key hash together
         let mut hasher = Sha256::new();
