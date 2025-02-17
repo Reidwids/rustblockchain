@@ -4,10 +4,13 @@ use std::{
     u32,
 };
 
-use crate::ownership::address::bytes_to_hex_string;
+use crate::ownership::address::{bytes_to_hex_string, Address};
 use sha2::{Digest, Sha256};
 
-use super::{merkle::MerkleTree, transaction::tx::Tx};
+use super::{
+    merkle::MerkleTree,
+    transaction::tx::{coinbase_tx, Tx},
+};
 
 pub struct Block {
     hash: [u8; 32],
@@ -19,12 +22,17 @@ pub struct Block {
 }
 
 impl Block {
-    // pub fn genesis(coinbase: &Tx) -> Self {}
+    /// Create the genesis block from a coinbase transaction
+    pub fn genesis(addr: &Address) -> Self {
+        let cbtx = coinbase_tx(addr);
+        Self::new(vec![cbtx], [0u8; 32], 0)
+    }
 
-    pub fn new(txs: &Vec<Tx>, prev_hash: [u8; 32], height: u32) -> Self {
+    /// Create and mine a new block
+    pub fn new(txs: Vec<Tx>, prev_hash: [u8; 32], height: u32) -> Self {
         let mut block = Block {
             hash: [0u8; 32], // Initialize as empty
-            txs: txs.clone(),
+            txs,
             prev_hash,
             nonce: 0,
             height,
@@ -44,6 +52,7 @@ impl Block {
         block
     }
 
+    /// Mines a designated block using proof of work
     pub fn mine(&mut self) -> (u32, [u8; 32]) {
         let target = get_target_difficulty();
         let mut nonce: u32 = 0;
@@ -69,6 +78,7 @@ impl Block {
         (nonce, hash)
     }
 
+    /// Hash the block into a single SHA256 hash
     pub fn hash(&self) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(self.prev_hash);
@@ -82,7 +92,8 @@ impl Block {
         result.into()
     }
 
-    pub fn hash_txs(&self) -> [u8; 32] {
+    /// Using a Merkle tree, derive the hash of a root block's transactions
+    fn hash_txs(&self) -> [u8; 32] {
         let tx_hashes = self.txs.iter().map(|tx| tx.hash().to_vec()).collect();
         let tree = MerkleTree::new(tx_hashes);
         tree.root.hash

@@ -220,7 +220,7 @@ impl TxInput {
 }
 
 /// Create the coinbase tx
-pub fn coinbase_tx(to: Address) -> Tx {
+pub fn coinbase_tx(to: &Address) -> Tx {
     // Coinbase txs will contain an arbitrary in, since there is no previous out
     let mut rand_data = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut rand_data);
