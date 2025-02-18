@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::ownership::address::{bytes_to_hex_string, Address};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::{
@@ -12,6 +13,7 @@ use super::{
     transaction::tx::{coinbase_tx, Tx},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
     hash: [u8; 32],
     txs: Vec<Tx>,

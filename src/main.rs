@@ -7,6 +7,7 @@ mod blockchain {
         pub mod tx;
         pub mod utxo;
     }
+    pub mod chain;
 }
 mod ownership {
     pub mod address;
@@ -15,9 +16,10 @@ mod ownership {
 }
 mod cli {
     pub mod cli;
+    pub mod db;
     pub mod handlers;
 }
-pub const DB_PATH: &str = "./db";
+
 fn main() {
     Cli::run();
 }
