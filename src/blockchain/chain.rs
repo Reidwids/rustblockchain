@@ -5,6 +5,7 @@ use crate::{
 
 use super::block::Block;
 
+/// Initializes the blockchain, and fails if a blockchain already exists
 pub fn init_blockchain(addr: &Address) {
     if blockchain_exists() {
         panic!("[chain::init_blockchain] ERROR: Blockchain already exists");

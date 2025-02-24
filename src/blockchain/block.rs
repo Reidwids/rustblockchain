@@ -15,9 +15,9 @@ use super::{
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
+    pub txs: Vec<Tx>,
+    pub prev_hash: [u8; 32],
     hash: [u8; 32],
-    txs: Vec<Tx>,
-    prev_hash: [u8; 32],
     nonce: u32,
     height: u32,
     timestamp: u64,
@@ -28,6 +28,10 @@ impl Block {
     pub fn genesis(addr: &Address) -> Self {
         let cbtx = coinbase_tx(addr);
         Self::new(vec![cbtx], [0u8; 32], 0)
+    }
+
+    pub fn is_genesis(&self) -> bool {
+        self.prev_hash == [0u8; 32] && self.height == 0
     }
 
     /// Create and mine a new block

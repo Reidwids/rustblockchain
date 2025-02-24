@@ -10,13 +10,13 @@ use std::fmt::Debug;
 use crate::ownership::address::{hash_pub_key, Address};
 
 /** Constants **/
-const COINBASE_REWARD: u64 = 20;
+const COINBASE_REWARD: u32 = 20;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tx {
-    id: [u8; 32], // ID of the transaction
-    inputs: Vec<TxInput>,
-    outputs: Vec<TxOutput>,
+    pub id: [u8; 32], // ID of the transaction
+    pub inputs: Vec<TxInput>,
+    pub outputs: Vec<TxOutput>,
 }
 
 impl Tx {
@@ -39,7 +39,7 @@ impl Tx {
 
         for (i, input) in self.inputs.iter().enumerate() {
             lines.push(format!("Input # {}:", i));
-            lines.push(format!("  Input TxID: {}", hex::encode(input.tx_id)));
+            lines.push(format!("  Input TxID: {}", hex::encode(input.prev_tx_id)));
             lines.push(format!("  Out: {}", input.out));
             lines.push(format!(
                 "  Signature: {}",
@@ -74,7 +74,7 @@ impl Tx {
 
         for input in &self.inputs {
             trimmed_inputs.push(TxInput {
-                tx_id: input.tx_id,
+                prev_tx_id: input.prev_tx_id,
                 out: input.out,
                 signature: Signature::from_compact(&[0u8; 64])
                     .expect("[Tx::trimmed_copy] ERROR: Failed to trim signature"),
@@ -98,7 +98,9 @@ impl Tx {
 
     /// Checks if this is the coinbase tx
     pub fn is_coinbase(&self) -> bool {
-        self.inputs.len() == 1 && self.inputs[0].tx_id == [0; 32] && self.inputs[0].out == u32::MAX
+        self.inputs.len() == 1
+            && self.inputs[0].prev_tx_id == [0; 32]
+            && self.inputs[0].out == usize::MAX
     }
 
     /// Sign a tx with a given private key and
@@ -139,7 +141,7 @@ impl Tx {
 
             // Verify that the prev output pub key hash matches the pub key of the input
             let prev_tx = prev_txs
-                .get(&input.tx_id)
+                .get(&input.prev_tx_id)
                 .expect("[Tx::verify] ERROR: Previous tx missing!");
             let prev_output = &prev_tx.outputs[input.out as usize];
             // Recompute the pub key hash from the input's public key
@@ -176,14 +178,14 @@ struct TxOutputs {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct TxOutput {
-    value: u64,             // Value of output tokens in the tx. Outputs cannot be split
-    pub_key_hash: [u8; 20], // Recipient pub key (Sha256 + Ripemd160). Locks the output so it can only be included in a future input by the output author.
+pub struct TxOutput {
+    pub value: u32, // Value of output tokens in the tx. Outputs cannot be split
+    pub pub_key_hash: [u8; 20], // Recipient pub key (Sha256 + Ripemd160). Locks the output so it can only be included in a future input by the output author.
 }
 
 impl TxOutput {
     /// Creates a new tx output given a value and a recipient address.
-    pub fn new(value: u64, addr: &Address) -> Self {
+    pub fn new(value: u32, addr: &Address) -> Self {
         let mut txo = TxOutput {
             value,
             pub_key_hash: [0; 20],
@@ -205,8 +207,8 @@ impl TxOutput {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct TxInput {
-    tx_id: [u8; 32],      // ID of the transaction the output is inside of
-    out: u32,             // Index that the output appears within the referenced transaction
+    pub prev_tx_id: [u8; 32], // ID of the transaction the output is inside of
+    pub out: usize,           // Index that the output appears within the referenced transaction
     signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.
     pub_key: PublicKey, // The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
 }
@@ -233,8 +235,8 @@ pub fn coinbase_tx(to: &Address) -> Tx {
 
     // Create the dummy in tx
     let tx_in = vec![TxInput {
-        tx_id: [0u8; 32],
-        out: u32::MAX,
+        prev_tx_id: [0u8; 32],
+        out: usize::MAX,
         signature,
         pub_key: PublicKey::from_secret_key(&secp, &secret_key),
     }];
