@@ -5,13 +5,13 @@ use secp256k1::PublicKey;
 use sha2::{Digest, Sha256};
 use std::fmt::Write;
 
-const CHECKSUM_LENGTH: u8 = 4;
 const VERSION: u8 = 0;
 
+#[derive(Debug)]
 pub struct Address {
     pub_key_hash: [u8; 20],
     version: u8,
-    checksum: [u8; 4],
+    checksum: [u8; 4], // Checksum length of 4 bytes
 }
 
 impl Address {

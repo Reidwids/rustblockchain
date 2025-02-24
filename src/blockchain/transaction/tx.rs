@@ -206,7 +206,7 @@ impl TxOutput {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct TxInput {
+pub struct TxInput {
     pub prev_tx_id: [u8; 32], // ID of the transaction the output is inside of
     pub out: usize,           // Index that the output appears within the referenced transaction
     signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.

@@ -6,16 +6,16 @@ use crate::{
 use super::block::Block;
 
 /// Initializes the blockchain, and fails if a blockchain already exists
-pub fn init_blockchain(addr: &Address) {
+pub fn create_blockchain(addr: &Address) {
     if blockchain_exists() {
-        panic!("[chain::init_blockchain] ERROR: Blockchain already exists");
+        panic!("[chain::create_blockchain] ERROR: Blockchain already exists");
     }
 
     let genesis_block = Block::genesis(addr);
 
     let block_hash = &genesis_block.hash();
     let block_data = bincode::serialize(&genesis_block)
-        .expect("[chain::init_blockchain] ERROR: Failed to serialize genesis block");
+        .expect("[chain::create_blockchain] ERROR: Failed to serialize genesis block");
 
     // Store block ref and last hash
     put_db(&genesis_block.hash(), &block_data);

@@ -19,7 +19,7 @@ pub fn find_utxos(pub_key_hash: [u8; 20]) -> Vec<TxOutput> {
 
     for res in iter {
         match res {
-            Err(e) => {
+            Err(_) => {
                 panic!("[utxo::find_utxos] ERROR: Failed to iterate through db")
             }
             Ok((key, val)) => {

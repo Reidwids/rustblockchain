@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 
-use super::handlers::handle_get_node_id;
+use super::handlers::{
+    handle_create_blockchain, handle_create_wallet, handle_get_node_id, handle_get_wallets,
+};
 
 #[derive(Parser)]
 #[command(name = "dcoin-cli")]
@@ -13,9 +15,20 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// gets or generates a node ID
+    /// Gets or generates a node ID
     #[command(about = "Generates a unique node identifier and stores it locally")]
     GetNodeId,
+
+    /// Creates a new wallet
+    #[command(about = "Creates a new wallet")]
+    CreateWallet,
+    /// Get existing wallets
+    #[command(about = "Gets existing wallets from local storage")]
+    GetWallets,
+
+    /// Creates a new blockchain or fails if one exists
+    #[command(about = "Creates a new blockchain")]
+    CreateBlockchain,
 }
 
 impl Cli {
@@ -24,6 +37,9 @@ impl Cli {
 
         match &cli.command {
             Commands::GetNodeId => handle_get_node_id(),
+            Commands::CreateBlockchain => handle_create_blockchain(),
+            Commands::CreateWallet => handle_create_wallet(),
+            Commands::GetWallets => handle_get_wallets(),
         }
     }
 }

@@ -2,7 +2,7 @@ use rocksdb::DB;
 
 use crate::blockchain::block::Block;
 
-const DB_PATH: &str = "./data/db";
+pub const DB_PATH: &str = "./data/db";
 pub const LAST_HASH_KEY: &str = "lh";
 
 // Our db will hold 2 types of kv pairs - an "lh" / hash pair to store our last hash,

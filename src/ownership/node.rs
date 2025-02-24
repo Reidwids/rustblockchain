@@ -1,4 +1,4 @@
-use crate::DB_PATH;
+use crate::cli::db::DB_PATH;
 use rocksdb::DB;
 use uuid::Uuid;
 

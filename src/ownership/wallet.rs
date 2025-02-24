@@ -3,6 +3,7 @@ use std::{
     error::Error,
     fs::{File, OpenOptions},
     io::{Read, Write},
+    path::Path,
 };
 
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
@@ -12,14 +13,14 @@ use uuid::Uuid;
 use super::address::Address;
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Wallet {
+pub struct Wallet {
     private_key: SecretKey,
     public_key: PublicKey,
 }
 
 impl Wallet {
     /// Create new wallet - Creates new pub key and private key
-    fn new() -> Self {
+    pub fn new() -> Self {
         let secp = Secp256k1::new();
         let (private_key, public_key) = secp.generate_keypair(&mut secp256k1::rand::thread_rng());
 
@@ -29,14 +30,14 @@ impl Wallet {
         }
     }
 
-    /// Get wallet address
+    /// Gets the full wallet address from a given wallet using the public key
     pub fn get_wallet_address(&self) -> Address {
         Address::new_from_key(self.public_key)
     }
 }
 #[derive(Serialize, Deserialize, Debug)]
-struct WalletStore {
-    wallets: HashMap<String, Wallet>,
+pub struct WalletStore {
+    pub wallets: HashMap<String, Wallet>,
 }
 
 impl WalletStore {
@@ -47,11 +48,16 @@ impl WalletStore {
         Ok(())
     }
 
-    pub fn get_wallets(node_id: &Uuid) -> HashMap<String, Wallet> {
-        // In the future, could handle multiple local wallets or a get or create paradigm here
-        let wallet_store = Self::load_from_file(node_id)
-            .expect("[WalletStore::load_from_file] ERROR: Could not load wallet file");
-        wallet_store.wallets
+    /// Get or create an existing wallet store
+    pub fn init_wallet_store(node_id: &Uuid) -> WalletStore {
+        if Path::new(&get_wallet_path(node_id)).exists() {
+            Self::load_from_file(node_id)
+                .expect("[WalletStore::load_from_file] ERROR: Could not load wallet file")
+        } else {
+            WalletStore {
+                wallets: HashMap::new(),
+            }
+        }
     }
 
     fn load_from_file(node_id: &Uuid) -> Result<Self, Box<dyn Error>> {
@@ -67,10 +73,12 @@ impl WalletStore {
         Ok(wallets)
     }
 
-    pub fn add_wallet(&mut self) -> Address {
+    pub fn add_wallet(&mut self, node_id: &Uuid) -> Address {
         let new_wallet = Wallet::new();
         let address = new_wallet.get_wallet_address();
         self.wallets.insert(address.get_full_address(), new_wallet);
+        self.save_to_file(node_id)
+            .expect("[wallet::add_wallet] ERROR: Failed to save new wallet");
         address
     }
 }
