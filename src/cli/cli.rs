@@ -30,7 +30,7 @@ enum Commands {
 
     /// Creates a new blockchain or fails if one exists
     #[command(about = "Creates a new blockchain")]
-    CreateBlockchain { address: String },
+    CreateBlockchain { address: Option<String> },
 
     /// Clear the existing blockchain from memory
     #[command(about = "Clears the existing blockchain")]

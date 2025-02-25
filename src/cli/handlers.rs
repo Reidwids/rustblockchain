@@ -9,15 +9,14 @@ pub fn handle_get_node_id() {
 }
 
 pub fn handle_create_wallet() {
-    let node_id = get_node_id();
-    let mut wallet_store = WalletStore::init_wallet_store(&node_id);
-    let addr = wallet_store.add_wallet(&node_id);
+    let mut wallet_store = WalletStore::init_wallet_store();
+    let addr = wallet_store.add_wallet();
 
     println!("New wallet address: {:?}", addr.get_full_address());
 }
 
 pub fn handle_get_wallets() {
-    let wallet_store = WalletStore::init_wallet_store(&get_node_id());
+    let wallet_store = WalletStore::init_wallet_store();
     if wallet_store.wallets.is_empty() {
         println!("No wallets found! Try creating a new wallet")
     }
@@ -26,8 +25,19 @@ pub fn handle_get_wallets() {
     }
 }
 
-pub fn handle_create_blockchain(req_addr: &String) {
-    let address = Address::new_from_str(req_addr);
+pub fn handle_create_blockchain(req_addr: &Option<String>) {
+    let address: Address;
+    match req_addr {
+        Some(a) => address = Address::new_from_str(a),
+        None => {
+            let mut wallet_store = WalletStore::init_wallet_store();
+            address = wallet_store.add_wallet();
+            println!(
+                "Wallet address not provided - created new local wallet {} to receive mining rewards",
+                address.get_full_address()
+            );
+        }
+    }
     create_blockchain(&address);
     println!("Successfully created blockchain!");
     println!("Mining rewards sent to {}", address.get_full_address());

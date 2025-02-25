@@ -12,6 +12,8 @@ use uuid::Uuid;
 
 use super::address::Address;
 
+const WALLET_PATH: &str = "./data/wallet_store.data";
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Wallet {
     private_key: SecretKey,
@@ -41,17 +43,17 @@ pub struct WalletStore {
 }
 
 impl WalletStore {
-    pub fn save_to_file(&self, node_id: &Uuid) -> Result<(), Box<dyn Error>> {
+    pub fn save_to_file(&self) -> Result<(), Box<dyn Error>> {
         let encoded: Vec<u8> = bincode::serialize(self)?;
-        let mut file = File::create(get_wallet_path(node_id))?;
+        let mut file = File::create(WALLET_PATH)?;
         file.write_all(&encoded)?;
         Ok(())
     }
 
     /// Get or create an existing wallet store
-    pub fn init_wallet_store(node_id: &Uuid) -> WalletStore {
-        if Path::new(&get_wallet_path(node_id)).exists() {
-            Self::load_from_file(node_id)
+    pub fn init_wallet_store() -> WalletStore {
+        if Path::new(WALLET_PATH).exists() {
+            Self::load_from_file()
                 .expect("[WalletStore::load_from_file] ERROR: Could not load wallet file")
         } else {
             WalletStore {
@@ -60,11 +62,9 @@ impl WalletStore {
         }
     }
 
-    fn load_from_file(node_id: &Uuid) -> Result<Self, Box<dyn Error>> {
+    fn load_from_file() -> Result<Self, Box<dyn Error>> {
         // Load file
-        let mut file = OpenOptions::new()
-            .read(true)
-            .open(get_wallet_path(node_id))?;
+        let mut file = OpenOptions::new().read(true).open(WALLET_PATH)?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
 
@@ -73,16 +73,12 @@ impl WalletStore {
         Ok(wallets)
     }
 
-    pub fn add_wallet(&mut self, node_id: &Uuid) -> Address {
+    pub fn add_wallet(&mut self) -> Address {
         let new_wallet = Wallet::new();
         let address = new_wallet.get_wallet_address();
         self.wallets.insert(address.get_full_address(), new_wallet);
-        self.save_to_file(node_id)
+        self.save_to_file()
             .expect("[wallet::add_wallet] ERROR: Failed to save new wallet");
         address
     }
-}
-
-fn get_wallet_path(node_id: &Uuid) -> String {
-    format!("./data/wallet_{}.data", node_id.to_string())
 }
