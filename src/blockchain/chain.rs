@@ -1,6 +1,8 @@
+use rocksdb::IteratorMode;
+
 use crate::{
-    cli::db::{blockchain_exists, put_db, LAST_HASH_KEY},
-    ownership::address::Address,
+    cli::db::{blockchain_exists, open_db, put_db, LAST_HASH_KEY},
+    ownership::{address::Address, node::NODE_KEY},
 };
 
 use super::block::Block;
@@ -20,4 +22,21 @@ pub fn create_blockchain(addr: &Address) {
     // Store block ref and last hash
     put_db(&genesis_block.hash(), &block_data);
     put_db(LAST_HASH_KEY.as_bytes(), block_hash);
+}
+
+/// Clears the existing chain. Retains the node id
+pub fn clear_blockchain() {
+    let db = open_db();
+
+    let mut batch = rocksdb::WriteBatch::default();
+
+    for item in db.iterator(IteratorMode::Start).flatten() {
+        let (key, _) = item;
+        if key.as_ref() != NODE_KEY.as_bytes() {
+            batch.delete(key.as_ref()); // Convert Box<[u8]> to &[u8]
+        }
+    }
+
+    db.write(batch)
+        .expect("[chain::clear_blockchain] ERROR: Failed to delete blockchain");
 }

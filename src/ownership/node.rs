@@ -2,7 +2,7 @@ use crate::cli::db::DB_PATH;
 use rocksdb::DB;
 use uuid::Uuid;
 
-const NODE_KEY: &str = "node_id";
+pub const NODE_KEY: &str = "node_id";
 
 /// Get or create the local node ID.
 pub fn get_node_id() -> Uuid {

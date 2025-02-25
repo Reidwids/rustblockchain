@@ -1,4 +1,7 @@
-use crate::ownership::{node::get_node_id, wallet::WalletStore};
+use crate::{
+    blockchain::chain::{clear_blockchain, create_blockchain},
+    ownership::{address::Address, node::get_node_id, wallet::WalletStore},
+};
 
 pub fn handle_get_node_id() {
     let node_id = get_node_id();
@@ -18,13 +21,19 @@ pub fn handle_get_wallets() {
     if wallet_store.wallets.is_empty() {
         println!("No wallets found! Try creating a new wallet")
     }
-
     for (addr, _) in wallet_store.wallets {
         println!("Wallet address: {:?}", addr);
     }
 }
 
-pub fn handle_create_blockchain() {
-    // create_blockchain(addr);
-    // println!("Node ID: {}", node_id);
+pub fn handle_create_blockchain(req_addr: &String) {
+    let address = Address::new_from_str(req_addr);
+    create_blockchain(&address);
+    println!("Successfully created blockchain!");
+    println!("Mining rewards sent to {}", address.get_full_address());
+}
+
+pub fn handle_clear_blockchain() {
+    clear_blockchain();
+    println!("Blockchain data removed successfully")
 }

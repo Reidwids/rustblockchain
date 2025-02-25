@@ -65,7 +65,9 @@ impl Block {
         let mut hash: [u8; 32] = [0; 32];
         let max = u32::MAX;
 
+        println!("Mining block:");
         while nonce < max {
+            self.nonce = nonce;
             hash = self.hash();
 
             // Print hash repeating over same line
@@ -81,6 +83,8 @@ impl Block {
                 nonce += 1
             }
         }
+        // Leave an empty line after the hash is found
+        println!();
         (nonce, hash)
     }
 
@@ -107,16 +111,15 @@ impl Block {
 }
 
 // Difficulty can be made dynamic in future
-const DIFFICULTY: usize = 15;
+const DIFFICULTY: usize = 16;
 fn get_target_difficulty() -> [u8; 32] {
     let mut target = [0u8; 32];
 
-    // This PoW algorithm shifts 1 by (256 - Difficulty) to get a target that has zeroes for the first n bits
+    // This PoW algorithm shifts 1 by (256 - Difficulty) to get a target that has zeroes for the first *Difficulty bits
     // When mining, we will hash while changing the nonce until a hash is found that is less
     // than the target - meaning it has the first n bits set to 0
-    let shift = 256 - DIFFICULTY;
-    let byte_index = shift / 8;
-    let bit_index = shift % 8;
+    let byte_index = DIFFICULTY / 8;
+    let bit_index = DIFFICULTY % 8;
 
     target[byte_index] = 1 << (7 - bit_index);
     target
