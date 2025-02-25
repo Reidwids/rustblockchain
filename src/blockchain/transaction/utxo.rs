@@ -9,7 +9,7 @@ use super::tx::TxOutput;
 const UTXO_PREFIX: &str = "utxo-";
 
 /// Searches through all db entries with the UTXO prefix for utxos with outputs matching the given pub key hash
-pub fn find_utxos(pub_key_hash: [u8; 20]) -> Vec<TxOutput> {
+pub fn find_utxos(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
     let mut utxos: Vec<TxOutput> = Vec::new();
     let db = db::open_db();
     let iter = db.iterator(IteratorMode::From(
@@ -68,7 +68,7 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> HashMap<[u8;
                     for (out_idx, output) in outputs.iter().enumerate() {
                         // If we get a match and we have more room to accumulate, add the
                         // index of the utxo to the map, using the tx id as the key
-                        if output.is_locked_with_key(pub_key_hash) && accumulated < amount {
+                        if output.is_locked_with_key(&pub_key_hash) && accumulated < amount {
                             accumulated += output.value;
                             utxo_map
                                 .entry(tx_id)

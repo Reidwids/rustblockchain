@@ -1,5 +1,8 @@
 use crate::{
-    blockchain::chain::{clear_blockchain, create_blockchain},
+    blockchain::{
+        chain::{clear_blockchain, create_blockchain},
+        transaction::utxo::{find_utxos, reindex_utxos},
+    },
     ownership::{address::Address, node::get_node_id, wallet::WalletStore},
 };
 
@@ -32,8 +35,9 @@ pub fn handle_create_blockchain(req_addr: &Option<String>) {
         None => {
             let mut wallet_store = WalletStore::init_wallet_store();
             address = wallet_store.add_wallet();
+            println!("Wallet address not provided");
             println!(
-                "Wallet address not provided - created new local wallet {} to receive mining rewards",
+                "Created new local wallet to receive mining rewards: {}",
                 address.get_full_address()
             );
         }
@@ -46,4 +50,20 @@ pub fn handle_create_blockchain(req_addr: &Option<String>) {
 pub fn handle_clear_blockchain() {
     clear_blockchain();
     println!("Blockchain data removed successfully")
+}
+
+pub fn handle_get_balance(req_addr: &String) {
+    let address = Address::new_from_str(req_addr);
+    reindex_utxos();
+
+    let utxos = find_utxos(address.pub_key_hash());
+
+    let mut balance = 0;
+
+    for utxo in utxos {
+        balance += utxo.value;
+    }
+
+    println!("Address: {}", req_addr);
+    println!("Balance: {}", balance);
 }

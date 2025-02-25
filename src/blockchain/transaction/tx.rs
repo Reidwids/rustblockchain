@@ -10,7 +10,7 @@ use std::fmt::Debug;
 use crate::ownership::address::{hash_pub_key, Address};
 
 /** Constants **/
-const COINBASE_REWARD: u32 = 20;
+const COINBASE_REWARD: u32 = 100;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tx {
@@ -63,10 +63,13 @@ impl Tx {
         lines.join("\n")
     }
 
-    /// Returns a copy of the given Tx without a pub key or signature
-    pub fn trimmed_copy(&self) -> Tx {
+    /// Returns a copy of the given Tx without input pub keys and signatures.
+    /// This ensures standardization when signing and validating - so that the tx
+    /// has the same format when on either side of the tx.
+    /// Note that removing the pub key isn't necessary - but is done simply to shave off
+    /// extra data.
+    fn trimmed_copy(&self) -> Tx {
         let mut trimmed_inputs: Vec<TxInput> = vec![];
-        let mut trimmed_outputs: Vec<TxOutput> = vec![];
 
         let secp = Secp256k1::new();
         let dummy_priv_key = SecretKey::from_slice(&[1u8; 32])
@@ -76,23 +79,18 @@ impl Tx {
             trimmed_inputs.push(TxInput {
                 prev_tx_id: input.prev_tx_id,
                 out: input.out,
+                // Set the sig to an empty byte array
                 signature: Signature::from_compact(&[0u8; 64])
                     .expect("[Tx::trimmed_copy] ERROR: Failed to trim signature"),
+                // Set the pubkey to a standardized dummy key
                 pub_key: PublicKey::from_secret_key(&secp, &dummy_priv_key),
-            })
-        }
-
-        for output in &self.outputs {
-            trimmed_outputs.push(TxOutput {
-                value: output.value,
-                pub_key_hash: output.pub_key_hash,
             })
         }
 
         Tx {
             id: [0u8; 32], // Empty ID to be filled after hashing
             inputs: trimmed_inputs,
-            outputs: trimmed_outputs,
+            outputs: self.outputs.clone(),
         }
     }
 
@@ -103,22 +101,20 @@ impl Tx {
             && self.inputs[0].out == usize::MAX
     }
 
-    /// Sign a tx with a given private key and
+    /// Sign a tx with a given private key
     pub fn sign(&mut self, priv_key: &SecretKey) {
         if self.is_coinbase() {
             return; // Coinbase txs don't need to be signed
         }
-
         let secp = Secp256k1::new();
         let tx_copy_base = self.trimmed_copy();
 
-        // Loop through inputs from original tx so we can append a signature
-
-        // Set the ID to the hash of the tx. When we verify, this will be used for pubkey comparison
+        // Loop through inputs from original tx so we can append a signature.
         for input in &mut self.inputs {
             // Build a copy for hashing that does not include the pubkey or signature
-            let mut tx_copy = tx_copy_base.trimmed_copy();
+            let mut tx_copy: Tx = tx_copy_base.trimmed_copy();
 
+            // Set the ID to the hash of the tx. When we verify, this will be used for pubkey comparison
             tx_copy.id = tx_copy.hash();
             let msg = Message::from_digest(tx_copy.id);
             let sig = secp.sign_ecdsa(&msg, priv_key);
@@ -200,8 +196,8 @@ impl TxOutput {
     }
 
     /// Returns a boolean representing the comparison of the pub_key_hash to an incoming hash
-    pub fn is_locked_with_key(&self, pub_key_hash: [u8; 20]) -> bool {
-        pub_key_hash == self.pub_key_hash
+    pub fn is_locked_with_key(&self, pub_key_hash: &[u8; 20]) -> bool {
+        self.pub_key_hash == *pub_key_hash
     }
 }
 

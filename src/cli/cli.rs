@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 
 use super::handlers::{
-    handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_node_id,
-    handle_get_wallets,
+    handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_balance,
+    handle_get_node_id, handle_get_wallets,
 };
 
 #[derive(Parser)]
@@ -35,6 +35,10 @@ enum Commands {
     /// Clear the existing blockchain from memory
     #[command(about = "Clears the existing blockchain")]
     ClearBlockchain,
+
+    /// Get balance of a given address
+    #[command(about = "Get the balance of a given address")]
+    GetBalance { address: String },
 }
 
 impl Cli {
@@ -47,6 +51,7 @@ impl Cli {
             Commands::GetWallets => handle_get_wallets(),
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),
             Commands::ClearBlockchain => handle_clear_blockchain(),
+            Commands::GetBalance { address } => handle_get_balance(address),
         }
     }
 }
