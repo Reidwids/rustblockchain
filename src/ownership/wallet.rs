@@ -36,6 +36,14 @@ impl Wallet {
     pub fn get_wallet_address(&self) -> Address {
         Address::new_from_key(self.public_key)
     }
+
+    pub fn pub_key(&self) -> PublicKey {
+        self.public_key
+    }
+
+    pub fn private_key(&self) -> &SecretKey {
+        &self.private_key
+    }
 }
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WalletStore {

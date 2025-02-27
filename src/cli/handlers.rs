@@ -3,7 +3,11 @@ use crate::{
         chain::{clear_blockchain, create_blockchain},
         transaction::utxo::{find_utxos, reindex_utxos},
     },
-    ownership::{address::Address, node::get_node_id, wallet::WalletStore},
+    ownership::{
+        address::Address,
+        node::get_node_id,
+        wallet::{Wallet, WalletStore},
+    },
 };
 
 pub fn handle_get_node_id() {
@@ -66,4 +70,34 @@ pub fn handle_get_balance(req_addr: &String) {
 
     println!("Address: {}", req_addr);
     println!("Balance: {}", balance);
+}
+
+pub fn handle_send_tx(to: &String, value: &u32, from: &Option<String>, mine: &bool) {
+    let wallet_store = WalletStore::init_wallet_store();
+    let from_wallet: &Wallet;
+    match from {
+        Some(addr) => {
+            from_wallet = wallet_store.wallets.get(addr).expect(
+                "[handlers::handle_send_tx] ERROR: No local wallet found for given from address",
+            );
+        }
+        None => {
+            let first_wallet = wallet_store.wallets.iter().next();
+            println!("From wallet not provided, using first local wallet");
+            match first_wallet {
+                Some((_, wallet)) => {
+                    from_wallet = wallet;
+                    println!(
+                        "First local wallet: {}",
+                        from_wallet.get_wallet_address().get_full_address()
+                    )
+                }
+                None => panic!("[handlers::handle_send_tx] ERROR: No local wallets found"),
+            }
+        }
+    }
+
+    let to_address = Address::new_from_str(to.as_str());
+
+    // Reindex txos etc
 }

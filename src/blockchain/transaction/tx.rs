@@ -8,6 +8,9 @@ use sha2::{Digest, Sha256};
 use std::fmt::Debug;
 
 use crate::ownership::address::{hash_pub_key, Address};
+use crate::ownership::wallet::Wallet;
+
+use super::utxo::find_spendable_utxos;
 
 /** Constants **/
 const COINBASE_REWARD: u32 = 100;
@@ -72,18 +75,15 @@ impl Tx {
         let mut trimmed_inputs: Vec<TxInput> = vec![];
 
         let secp = Secp256k1::new();
-        let dummy_priv_key = SecretKey::from_slice(&[1u8; 32])
-            .expect("[Tx::trimmed_copy] ERROR: Failed to trim pub key");
 
         for input in &self.inputs {
             trimmed_inputs.push(TxInput {
                 prev_tx_id: input.prev_tx_id,
                 out: input.out,
                 // Set the sig to an empty byte array
-                signature: Signature::from_compact(&[0u8; 64])
-                    .expect("[Tx::trimmed_copy] ERROR: Failed to trim signature"),
+                signature: empty_signature(),
                 // Set the pubkey to a standardized dummy key
-                pub_key: PublicKey::from_secret_key(&secp, &dummy_priv_key),
+                pub_key: PublicKey::from_secret_key(&secp, &empty_priv_key()),
             })
         }
 
@@ -165,13 +165,62 @@ impl Tx {
     }
 
     /// Create a new tx
-    pub fn new(&self) {} // TODO
+    pub fn new(from_wallet: &Wallet, to_address: &Address, value: u32) -> Tx {
+        let mut inputs: Vec<TxInput> = Vec::new();
+        let mut outputs: Vec<TxOutput> = Vec::new();
+        let from_address = from_wallet.get_wallet_address();
+
+        // Find spendable outputs to spend as inputs to the new tx
+        let (sum, spendable_txos) = find_spendable_utxos(*from_address.pub_key_hash(), value);
+
+        // Not enough funds if total spendable is less than new tx value
+        if sum < value {
+            panic!(
+                "[tx::new] ERROR: {} does not have enough funds!!!",
+                from_address.get_full_address()
+            )
+        }
+
+        // Create a new input from each spendable txo contributing to the sum
+        for (tx_id, out_idxs) in spendable_txos {
+            for i in out_idxs {
+                inputs.push(TxInput {
+                    prev_tx_id: tx_id,
+                    out: i,
+                    signature: empty_signature(),
+                    pub_key: from_wallet.pub_key(),
+                });
+            }
+        }
+
+        // Create a new output of the to address receiving the value
+        outputs.push(TxOutput {
+            value,
+            pub_key_hash: *to_address.pub_key_hash(),
+        });
+
+        // Any leftover sum should be retained by the sender
+        if sum > value {
+            outputs.push(TxOutput {
+                value: sum - value,
+                pub_key_hash: *to_address.pub_key_hash(),
+            });
+        }
+
+        // Sign the tx
+        let mut new_tx = Tx {
+            id: [0; 32],
+            inputs,
+            outputs,
+        };
+        new_tx.id = new_tx.hash();
+        new_tx.sign(from_wallet.private_key());
+
+        new_tx
+    }
 }
 
 /** Inputs and Outputs **/
-struct TxOutputs {
-    outputs: Vec<TxOutput>,
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxOutput {
@@ -252,4 +301,13 @@ pub fn coinbase_tx(to: &Address) -> Tx {
     // Note that the coinbase tx hash is irrelevant, since we don't verify the coinbase tx.
     tx.id = tx.hash();
     tx
+}
+
+// TODO: Factor these out in future with options
+fn empty_priv_key() -> SecretKey {
+    SecretKey::from_slice(&[1u8; 32]).unwrap()
+}
+
+fn empty_signature() -> Signature {
+    Signature::from_compact(&[0u8; 64]).unwrap()
 }

@@ -40,8 +40,11 @@ pub fn find_utxos(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
 
 /// Creates a hashmap of transaction ids to spendable utxo indexes by searching the db for utxos with spendable
 /// outputs that add to the target amount
-pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> HashMap<[u8; 32], Vec<u32>> {
-    let mut utxo_map: HashMap<[u8; 32], Vec<u32>> = HashMap::new();
+pub fn find_spendable_utxos(
+    pub_key_hash: [u8; 20],
+    amount: u32,
+) -> (u32, HashMap<[u8; 32], Vec<usize>>) {
+    let mut utxo_map: HashMap<[u8; 32], Vec<usize>> = HashMap::new();
     let mut accumulated: u32 = 0;
     let db = db::open_db();
     let iter = db.iterator(IteratorMode::From(
@@ -70,10 +73,7 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> HashMap<[u8;
                         // index of the utxo to the map, using the tx id as the key
                         if output.is_locked_with_key(&pub_key_hash) && accumulated < amount {
                             accumulated += output.value;
-                            utxo_map
-                                .entry(tx_id)
-                                .or_insert_with(Vec::new)
-                                .push(out_idx as u32);
+                            utxo_map.entry(tx_id).or_insert_with(Vec::new).push(out_idx);
                             // Stop iterating once we have enough funds
                             if accumulated >= amount {
                                 break;
@@ -88,7 +88,7 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> HashMap<[u8;
             break;
         }
     }
-    utxo_map
+    (accumulated, utxo_map)
 }
 
 /// Builds a hashmap containing the UTXO set from the chain found in the database.
