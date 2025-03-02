@@ -1,7 +1,7 @@
 use rocksdb::IteratorMode;
 
 use crate::{
-    cli::db::{blockchain_exists, open_db, put_db, LAST_HASH_KEY},
+    cli::db::{blockchain_exists, get_db, get_last_hash, open_db, put_db, LAST_HASH_KEY},
     ownership::{address::Address, node::NODE_KEY},
 };
 
@@ -13,15 +13,9 @@ pub fn create_blockchain(addr: &Address) {
         panic!("[chain::create_blockchain] ERROR: Blockchain already exists");
     }
 
-    let genesis_block = Block::genesis(addr);
+    let mut genesis_block = Block::genesis(addr);
 
-    let block_hash = &genesis_block.hash();
-    let block_data = bincode::serialize(&genesis_block)
-        .expect("[chain::create_blockchain] ERROR: Failed to serialize genesis block");
-
-    // Store block ref and last hash
-    put_db(&genesis_block.hash(), &block_data);
-    put_db(LAST_HASH_KEY.as_bytes(), block_hash);
+    genesis_block.mine();
 }
 
 /// Clears the existing chain. Retains the node id
@@ -39,4 +33,13 @@ pub fn clear_blockchain() {
 
     db.write(batch)
         .expect("[chain::clear_blockchain] ERROR: Failed to delete blockchain");
+}
+
+pub fn get_last_block() -> Block {
+    let lh = get_last_hash();
+    let block_serialized =
+        get_db(&lh).expect("[block::get_last_block] ERROR: Could not get last block");
+    let block: Block = bincode::deserialize(&block_serialized)
+        .expect("[block::get_last_block] ERROR: Failed to deserialize last block");
+    block
 }

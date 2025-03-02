@@ -4,7 +4,11 @@ use std::{
     u32,
 };
 
-use crate::ownership::address::{bytes_to_hex_string, Address};
+use crate::{
+    blockchain::chain::get_last_block,
+    cli::db::{put_db, LAST_HASH_KEY},
+    ownership::address::{bytes_to_hex_string, Address},
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -17,17 +21,27 @@ use super::{
 pub struct Block {
     pub txs: Vec<Tx>,
     pub prev_hash: [u8; 32],
-    hash: [u8; 32],
-    nonce: u32,
-    height: u32,
-    timestamp: u64,
+    pub hash: [u8; 32],
+    pub nonce: u32,
+    pub height: u32,
+    pub timestamp: u64,
 }
 
 impl Block {
     /// Create the genesis block from a coinbase transaction
     pub fn genesis(addr: &Address) -> Self {
         let cbtx = coinbase_tx(addr);
-        Self::new(vec![cbtx], [0u8; 32], 0)
+        Block {
+            hash: [0u8; 32], // Initialize as empty
+            txs: vec![cbtx],
+            prev_hash: [0u8; 32],
+            nonce: 0,
+            height: 0,
+            timestamp: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("[Block::new] ERROR: Failed to create timestamp")
+                .as_secs(),
+        }
     }
 
     pub fn is_genesis(&self) -> bool {
@@ -35,31 +49,28 @@ impl Block {
     }
 
     /// Create and mine a new block
-    pub fn new(txs: Vec<Tx>, prev_hash: [u8; 32], height: u32) -> Self {
-        let mut block = Block {
+    pub fn new(txs: &Vec<Tx>, addr: &Address) -> Self {
+        let cbtx = coinbase_tx(addr);
+        let prev_block = get_last_block();
+        let mut all_txs = Vec::with_capacity(txs.len() + 1);
+        all_txs.push(cbtx); // Add coinbase first
+        all_txs.extend_from_slice(txs); // Add the rest of the transactions
+
+        Block {
             hash: [0u8; 32], // Initialize as empty
-            txs,
-            prev_hash,
+            txs: all_txs,
+            prev_hash: prev_block.hash,
             nonce: 0,
-            height,
+            height: prev_block.height + 1,
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .expect("[Block::new] ERROR: Failed to create timestamp")
                 .as_secs(),
-        };
-        let (nonce, hash) = block.mine();
-
-        // Save mining results to block
-        block.hash = hash;
-        block.nonce = nonce;
-        println!("Hash found: {}", bytes_to_hex_string(&hash));
-        println!("Nonce: {}", nonce);
-
-        block
+        }
     }
 
     /// Mines a designated block using proof of work
-    pub fn mine(&mut self) -> (u32, [u8; 32]) {
+    pub fn mine(&mut self) {
         let target = get_target_difficulty();
         let mut nonce: u32 = 0;
         let mut hash: [u8; 32] = [0; 32];
@@ -85,7 +96,19 @@ impl Block {
         }
         // Leave an empty line after the hash is found
         println!();
-        (nonce, hash)
+
+        self.hash = hash;
+        self.nonce = nonce;
+        println!("Hash found: {}", bytes_to_hex_string(&hash));
+        println!("Nonce: {}", nonce);
+
+        // Prepare block for db
+        let block_hash = self.hash();
+        let block_data = bincode::serialize(self)
+            .expect("[chain::create_blockchain] ERROR: Failed to serialize genesis block");
+        // Store block ref and last hash
+        put_db(&block_hash, &block_data);
+        put_db(LAST_HASH_KEY.as_bytes(), &block_hash);
     }
 
     /// Hash the block into a single SHA256 hash

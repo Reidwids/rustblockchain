@@ -6,29 +6,25 @@ use crate::{blockchain::block::Block, cli::db};
 
 use super::tx::TxOutput;
 
-const UTXO_PREFIX: &str = "utxo-";
+const UTXO_PREFIX: &[u8] = b"utxo-";
 
 /// Searches through all db entries with the UTXO prefix for utxos with outputs matching the given pub key hash
 pub fn find_utxos(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
+    // Need to add mempool checks******************************************
     let mut utxos: Vec<TxOutput> = Vec::new();
     let db = db::open_db();
-    let iter = db.iterator(IteratorMode::From(
-        UTXO_PREFIX.as_bytes(),
-        Direction::Forward,
-    ));
+    let iter = db.iterator(IteratorMode::From(UTXO_PREFIX, Direction::Forward));
 
     for res in iter {
         match res {
             Err(_) => {
                 panic!("[utxo::find_utxos] ERROR: Failed to iterate through db")
             }
-            Ok((key, val)) => {
-                if key.starts_with(UTXO_PREFIX.as_bytes()) {
-                    let outputs: Vec<TxOutput> = bincode::deserialize(&val).unwrap();
-                    for output in outputs {
-                        if output.is_locked_with_key(pub_key_hash) {
-                            utxos.push(output);
-                        }
+            Ok((_, val)) => {
+                let outputs: Vec<TxOutput> = bincode::deserialize(&val).unwrap();
+                for output in outputs {
+                    if output.is_locked_with_key(pub_key_hash) {
+                        utxos.push(output);
                     }
                 }
             }
@@ -47,10 +43,7 @@ pub fn find_spendable_utxos(
     let mut utxo_map: HashMap<[u8; 32], Vec<usize>> = HashMap::new();
     let mut accumulated: u32 = 0;
     let db = db::open_db();
-    let iter = db.iterator(IteratorMode::From(
-        UTXO_PREFIX.as_bytes(),
-        Direction::Forward,
-    ));
+    let iter = db.iterator(IteratorMode::From(UTXO_PREFIX, Direction::Forward));
 
     for res in iter {
         match res {
@@ -58,26 +51,22 @@ pub fn find_spendable_utxos(
                 panic!("[utxo::find_utxos] ERROR: Failed to iterate through db")
             }
             Ok((key, val)) => {
-                if key.starts_with(UTXO_PREFIX.as_bytes()) {
-                    let outputs: Vec<TxOutput> = bincode::deserialize(&val).unwrap();
-                    let tx_id: [u8; 32] = key
-                        .strip_prefix(UTXO_PREFIX.as_bytes())
-                        .expect("[utxo::find_spendable_utxos] ERROR: Failed to trim prefix")
-                        .try_into()
-                        .expect(
-                            "[utxo::find_spendable_utxos] ERROR: Failed to parse transaction ID",
-                        );
+                let outputs: Vec<TxOutput> = bincode::deserialize(&val).unwrap();
+                let tx_id: [u8; 32] = key
+                    .strip_prefix(UTXO_PREFIX)
+                    .expect("[utxo::find_spendable_utxos] ERROR: Failed to trim prefix")
+                    .try_into()
+                    .expect("[utxo::find_spendable_utxos] ERROR: Failed to parse transaction ID");
 
-                    for (out_idx, output) in outputs.iter().enumerate() {
-                        // If we get a match and we have more room to accumulate, add the
-                        // index of the utxo to the map, using the tx id as the key
-                        if output.is_locked_with_key(&pub_key_hash) && accumulated < amount {
-                            accumulated += output.value;
-                            utxo_map.entry(tx_id).or_insert_with(Vec::new).push(out_idx);
-                            // Stop iterating once we have enough funds
-                            if accumulated >= amount {
-                                break;
-                            }
+                for (out_idx, output) in outputs.iter().enumerate() {
+                    // If we get a match and we have more room to accumulate, add the
+                    // index of the utxo to the map, using the tx id as the key
+                    if output.is_locked_with_key(&pub_key_hash) && accumulated < amount {
+                        accumulated += output.value;
+                        utxo_map.entry(tx_id).or_insert_with(Vec::new).push(out_idx);
+                        // Stop iterating once we have enough funds
+                        if accumulated >= amount {
+                            break;
                         }
                     }
                 }
@@ -144,10 +133,7 @@ fn get_utxos_from_chain() -> HashMap<[u8; 32], Vec<TxOutput>> {
 /// Delete all utxos stored in the db
 fn delete_all_utxos() {
     let db = db::open_db();
-    let iter = db.iterator(IteratorMode::From(
-        UTXO_PREFIX.as_bytes(),
-        Direction::Forward,
-    ));
+    let iter = db.iterator(IteratorMode::From(UTXO_PREFIX, Direction::Forward));
 
     for res in iter {
         match res {
@@ -178,7 +164,7 @@ pub fn reindex_utxos() {
 /// Helper fn to append the utxo prefix to a given tx id
 pub fn get_utxo_key(tx_id: &[u8; 32]) -> Vec<u8> {
     let mut key = Vec::new();
-    key.extend_from_slice(UTXO_PREFIX.as_bytes());
+    key.extend_from_slice(UTXO_PREFIX);
     key.extend_from_slice(tx_id);
     key
 }

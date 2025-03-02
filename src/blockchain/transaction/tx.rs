@@ -7,10 +7,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::Debug;
 
+use crate::cli::db;
 use crate::ownership::address::{hash_pub_key, Address};
 use crate::ownership::wallet::Wallet;
 
-use super::utxo::find_spendable_utxos;
+use super::mempool::put_mempool;
+use super::utxo::{find_spendable_utxos, get_utxo_key};
 
 /** Constants **/
 const COINBASE_REWARD: u32 = 100;
@@ -217,6 +219,34 @@ impl Tx {
         new_tx.sign(from_wallet.private_key());
 
         new_tx
+    }
+
+    pub fn remove_spent_utxos(&self) {
+        let utxo_key = get_utxo_key(&self.id);
+
+        if let Some(utxo_data) = db::get_db(&utxo_key) {
+            let mut utxos: Vec<TxOutput> = bincode::deserialize(&utxo_data).unwrap();
+
+            utxos = utxos
+                .into_iter()
+                .enumerate()
+                .filter_map(|(out_idx, utxo)| {
+                    if self.inputs.iter().any(|input| input.out == out_idx) {
+                        None // This UTXO is spent, remove it
+                    } else {
+                        Some(utxo) // Keep this UTXO
+                    }
+                })
+                .collect();
+
+            if utxos.is_empty() {
+                db::delete(&utxo_key);
+            } else {
+                let serialized_utxos = bincode::serialize(&utxos)
+                    .expect("[tx::remove_spent_utxos] ERROR: Failed to serialize UTXOs");
+                db::put_db(&utxo_key, &serialized_utxos);
+            }
+        }
     }
 }
 

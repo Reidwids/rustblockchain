@@ -1,14 +1,21 @@
 use crate::{
     blockchain::{
-        chain::{clear_blockchain, create_blockchain},
-        transaction::utxo::{find_utxos, reindex_utxos},
+        block::Block,
+        chain::{clear_blockchain, create_blockchain, get_last_block},
+        transaction::{
+            mempool::{get_mempool, put_mempool, reset_mempool},
+            tx::{coinbase_tx, Tx},
+            utxo::{find_utxos, reindex_utxos},
+        },
     },
     ownership::{
-        address::Address,
+        address::{bytes_to_hex_string, Address},
         node::get_node_id,
         wallet::{Wallet, WalletStore},
     },
 };
+
+use super::db::{get_block, get_last_hash};
 
 pub fn handle_get_node_id() {
     let node_id = get_node_id();
@@ -56,6 +63,57 @@ pub fn handle_clear_blockchain() {
     println!("Blockchain data removed successfully")
 }
 
+pub fn handle_print_blockchain(show_txs: &bool) {
+    let mut current_block = get_last_block();
+
+    loop {
+        println!("====================================");
+        println!("Block Height: {}", current_block.height);
+        println!(
+            "Block Hash: {:x?}",
+            bytes_to_hex_string(&current_block.hash)
+        );
+        println!(
+            "Previous Hash: {:x?}",
+            bytes_to_hex_string(&current_block.prev_hash)
+        );
+        println!("Timestamp: {}", current_block.timestamp);
+        println!("Nonce: {}", current_block.nonce);
+        println!("------------------------------------");
+
+        if *show_txs {
+            println!("Transactions:");
+            for tx in &current_block.txs {
+                println!("  Tx ID: {:x?}", bytes_to_hex_string(&tx.id));
+                for input in &tx.inputs {
+                    println!(
+                        "    Input: Prev Tx ID: {:x?}, Output Index: {}",
+                        bytes_to_hex_string(&input.prev_tx_id),
+                        input.out
+                    );
+                }
+                for output in &tx.outputs {
+                    println!(
+                        "    Output: Value: {}, Recipient Hash: {:x?}",
+                        output.value,
+                        bytes_to_hex_string(&output.pub_key_hash)
+                    );
+                }
+            }
+        }
+
+        println!("====================================");
+
+        // Break if we have reached the genesis block
+        if current_block.is_genesis() {
+            break;
+        }
+
+        // Get the previous block
+        current_block = get_block(&current_block.prev_hash);
+    }
+}
+
 pub fn handle_get_balance(req_addr: &String) {
     let address = Address::new_from_str(req_addr);
     reindex_utxos();
@@ -72,7 +130,7 @@ pub fn handle_get_balance(req_addr: &String) {
     println!("Balance: {}", balance);
 }
 
-pub fn handle_send_tx(to: &String, value: &u32, from: &Option<String>, mine: &bool) {
+pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool) {
     let wallet_store = WalletStore::init_wallet_store();
     let from_wallet: &Wallet;
     match from {
@@ -98,6 +156,21 @@ pub fn handle_send_tx(to: &String, value: &u32, from: &Option<String>, mine: &bo
     }
 
     let to_address = Address::new_from_str(to.as_str());
+    reindex_utxos();
 
-    // Reindex txos etc
+    let tx = Tx::new(from_wallet, &to_address, value);
+    tx.remove_spent_utxos();
+    put_mempool(&tx);
+    println!(
+        "Successfully added TX: Sent {} from {} to {}",
+        value,
+        from_wallet.get_wallet_address().get_full_address(),
+        to
+    );
+
+    if mine {
+        let mut new_block = Block::new(&get_mempool(), &from_wallet.get_wallet_address());
+        new_block.mine();
+        reset_mempool();
+    }
 }

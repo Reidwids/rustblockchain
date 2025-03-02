@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use super::handlers::{
     handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_balance,
-    handle_get_node_id, handle_get_wallets, handle_send_tx,
+    handle_get_node_id, handle_get_wallets, handle_print_blockchain, handle_send_tx,
 };
 
 #[derive(Parser)]
@@ -36,6 +36,13 @@ enum Commands {
     #[command(about = "Clears the existing blockchain")]
     ClearBlockchain,
 
+    /// Print the existing blockchain from memory
+    #[command(about = "Prints the existing blockchain")]
+    PrintBlockchain {
+        #[arg(short = 't')]
+        txs: bool,
+    },
+
     /// Get balance of a given address
     #[command(about = "Get the balance of a given address")]
     GetBalance { address: String },
@@ -64,13 +71,14 @@ impl Cli {
             Commands::GetWallets => handle_get_wallets(),
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),
             Commands::ClearBlockchain => handle_clear_blockchain(),
+            Commands::PrintBlockchain { txs } => handle_print_blockchain(txs),
             Commands::GetBalance { address } => handle_get_balance(address),
             Commands::SendTx {
                 to,
                 value,
                 from,
                 mine,
-            } => handle_send_tx(to, value, from, mine),
+            } => handle_send_tx(to, *value, from, *mine),
         }
     }
 }
