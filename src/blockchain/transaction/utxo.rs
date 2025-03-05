@@ -5,10 +5,9 @@ use rocksdb::IteratorMode;
 use crate::{
     blockchain::block::Block,
     cli::db::{self, utxo_cf, ROCKS_DB},
-    ownership::address::bytes_to_hex_string,
 };
 
-use super::tx::TxOutput;
+use super::{mempool::is_output_spent_in_mempool, tx::TxOutput};
 
 pub type UTXOSet = HashMap<([u8; 32], u32), TxOutput>;
 
@@ -51,7 +50,10 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSe
                 let (tx_id, out_idx) = db::from_utxo_db_key(&key);
                 // If we get a match and we have more room to accumulate, add the
                 // index of the utxo to the map, using the tx id as the key
-                if tx_out.is_locked_with_key(&pub_key_hash) && accumulated < amount {
+                if tx_out.is_locked_with_key(&pub_key_hash)
+                    && accumulated < amount
+                    && !is_output_spent_in_mempool(tx_id, out_idx)
+                {
                     accumulated += tx_out.value;
                     utxo_map.insert((tx_id, out_idx), tx_out);
                     // Stop iterating once we have enough funds

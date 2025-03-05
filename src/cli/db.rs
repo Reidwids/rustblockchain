@@ -5,7 +5,10 @@ use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, DB};
 
 use crate::blockchain::{
     block::Block,
-    transaction::tx::{Tx, TxOutput},
+    transaction::{
+        mempool::Mempool,
+        tx::{Tx, TxOutput},
+    },
 };
 
 pub const DB_PATH: &str = "./data/db";
@@ -130,7 +133,7 @@ pub fn put_last_hash(last_hash: &[u8; 32]) {
 
 /*** Mempool DB handlers ***/
 
-pub fn get_mempool() -> Vec<Tx> {
+pub fn get_mempool() -> Mempool {
     let mempool_data = ROCKS_DB.get(MEMPOOL_KEY.as_bytes()).unwrap();
     mempool_data
         .and_then(|data| bincode::deserialize(&data).ok())
