@@ -176,3 +176,34 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
         db::reset_mempool();
     }
 }
+
+pub fn handle_mine(reward_addr: &Option<String>) {
+    let wallet_store = WalletStore::init_wallet_store();
+    let from_wallet: &Wallet;
+    match reward_addr {
+        Some(addr) => {
+            from_wallet = wallet_store.wallets.get(addr).expect(
+                "[handlers::handle_mine] ERROR: No local wallet found for given from address",
+            );
+        }
+        None => {
+            let first_wallet = wallet_store.wallets.iter().next();
+            println!("Wallet address not provided, using first local wallet");
+            match first_wallet {
+                Some((_, wallet)) => {
+                    from_wallet = wallet;
+                    println!(
+                        "First local wallet: {}",
+                        from_wallet.get_wallet_address().get_full_address()
+                    )
+                }
+                None => panic!("[handlers::handle_mine] ERROR: No local wallets found"),
+            }
+        }
+    }
+
+    let mut new_block = Block::new(&db::get_mempool(), &from_wallet.get_wallet_address());
+    new_block.mine();
+    update_utxos(&new_block);
+    db::reset_mempool();
+}

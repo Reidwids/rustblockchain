@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use super::handlers::{
     handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_balance,
-    handle_get_node_id, handle_get_wallets, handle_print_blockchain, handle_send_tx,
+    handle_get_node_id, handle_get_wallets, handle_mine, handle_print_blockchain, handle_send_tx,
 };
 
 #[derive(Parser)]
@@ -59,6 +59,13 @@ enum Commands {
         #[arg(short = 'm', long = "mine")]
         mine: bool,
     },
+
+    /// Mine the existing transactions in the mempool
+    #[command(about = "Mine the existing transactions in the mempool ")]
+    Mine {
+        #[arg(short = 'a', long = "reward_addr")]
+        reward_addr: Option<String>,
+    },
 }
 
 impl Cli {
@@ -79,6 +86,7 @@ impl Cli {
                 from,
                 mine,
             } => handle_send_tx(to, *value, from, *mine),
+            Commands::Mine { reward_addr } => handle_mine(reward_addr),
         }
     }
 }
