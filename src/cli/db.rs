@@ -84,7 +84,7 @@ pub fn delete_utxo(tx_id: &[u8; 32], out_idx: u32) {
 
 pub fn block_cf() -> &'static ColumnFamily {
     ROCKS_DB
-        .cf_handle(UTXO_CF)
+        .cf_handle(BLOCK_CF)
         .expect("Column family not found")
 }
 
