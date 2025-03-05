@@ -39,27 +39,26 @@ pub fn utxo_cf() -> &'static ColumnFamily {
         .expect("Column family not found")
 }
 
-fn to_utxo_db_key(tx_id: &[u8; 32], out_idx: usize) -> Vec<u8> {
+fn to_utxo_db_key(tx_id: &[u8; 32], out_idx: u32) -> Vec<u8> {
     let mut key = Vec::with_capacity(36); // 32 bytes for tx_id + 4 bytes for out_idx
     key.extend_from_slice(tx_id);
     key.extend_from_slice(&out_idx.to_be_bytes());
     key
 }
 
-pub fn from_utxo_db_key(key: &[u8]) -> ([u8; 32], usize) {
-    // Ensure the key has the expected length (36 bytes: 32 for tx_id, 4 for out_idx)
-    println!("KEYLENGTH: {}", key.len());
+pub fn from_utxo_db_key(key: &[u8]) -> ([u8; 32], u32) {
+    // Ensure the key has the expected length (36 bytes: 32 for tx_id, 8 for out_idx)
     assert!(key.len() == 36, "Key length should be 36 bytes");
 
     let mut tx_id = [0u8; 32];
     tx_id.copy_from_slice(&key[0..32]); // Copy first 32 bytes into tx_id
 
-    let out_idx = usize::from_be_bytes(key[32..36].try_into().expect("Failed to convert out_idx"));
+    let out_idx = u32::from_be_bytes(key[32..36].try_into().expect("Failed to convert out_idx"));
 
     (tx_id, out_idx)
 }
 
-pub fn get_utxo(tx_id: &[u8; 32], out_idx: usize) -> Option<TxOutput> {
+pub fn get_utxo(tx_id: &[u8; 32], out_idx: u32) -> Option<TxOutput> {
     let utxo_data = ROCKS_DB
         .get_cf(utxo_cf(), to_utxo_db_key(tx_id, out_idx))
         .expect("[get] ERROR: Failed to read from DB");
@@ -67,7 +66,7 @@ pub fn get_utxo(tx_id: &[u8; 32], out_idx: usize) -> Option<TxOutput> {
     utxo_data.and_then(|data| bincode::deserialize(&data).ok())
 }
 
-pub fn put_utxo(tx_id: &[u8; 32], out_idx: usize, tx_out: &TxOutput) {
+pub fn put_utxo(tx_id: &[u8; 32], out_idx: u32, tx_out: &TxOutput) {
     let serialized =
         bincode::serialize(&tx_out).expect("[db::put_utxo] ERROR: Serialization failed");
     ROCKS_DB
@@ -75,7 +74,7 @@ pub fn put_utxo(tx_id: &[u8; 32], out_idx: usize, tx_out: &TxOutput) {
         .expect("[db::put_utxo] ERROR: Failed to write to DB");
 }
 
-pub fn delete_utxo(tx_id: &[u8; 32], out_idx: usize) {
+pub fn delete_utxo(tx_id: &[u8; 32], out_idx: u32) {
     ROCKS_DB
         .delete_cf(utxo_cf(), to_utxo_db_key(tx_id, out_idx))
         .expect("[delete] ERROR: Failed to delete from DB")

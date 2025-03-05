@@ -98,7 +98,7 @@ impl Tx {
     pub fn is_coinbase(&self) -> bool {
         self.inputs.len() == 1
             && self.inputs[0].prev_tx_id == [0; 32]
-            && self.inputs[0].out == usize::MAX
+            && self.inputs[0].out == u32::MAX
     }
 
     /// Sign a tx with a given private key
@@ -251,7 +251,7 @@ impl TxOutput {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxInput {
     pub prev_tx_id: [u8; 32], // ID of the transaction the output is inside of
-    pub out: usize,           // Index that the output appears within the referenced transaction
+    pub out: u32,             // Index that the output appears within the referenced transaction
     signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.
     pub_key: PublicKey, // The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
 }
@@ -279,7 +279,7 @@ pub fn coinbase_tx(to: &Address) -> Tx {
     // Create the dummy in tx
     let tx_in = vec![TxInput {
         prev_tx_id: [0u8; 32],
-        out: usize::MAX,
+        out: u32::MAX,
         signature,
         pub_key: PublicKey::from_secret_key(&secp, &secret_key),
     }];

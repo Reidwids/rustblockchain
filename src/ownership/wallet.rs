@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     error::Error,
-    fs::{File, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::Path,
 };
@@ -51,8 +51,13 @@ pub struct WalletStore {
 
 impl WalletStore {
     pub fn save_to_file(&self) -> Result<(), Box<dyn Error>> {
+        let path = Path::new(WALLET_PATH);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
         let encoded: Vec<u8> = bincode::serialize(self)?;
-        let mut file = File::create(WALLET_PATH)?;
+        let mut file = File::create(path)?;
         file.write_all(&encoded)?;
         Ok(())
     }

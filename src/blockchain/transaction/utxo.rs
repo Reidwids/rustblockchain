@@ -5,11 +5,12 @@ use rocksdb::IteratorMode;
 use crate::{
     blockchain::block::Block,
     cli::db::{self, utxo_cf, ROCKS_DB},
+    ownership::address::bytes_to_hex_string,
 };
 
 use super::tx::TxOutput;
 
-pub type UTXOSet = HashMap<([u8; 32], usize), TxOutput>;
+pub type UTXOSet = HashMap<([u8; 32], u32), TxOutput>;
 
 /// Searches through all db entries with the UTXO prefix for utxos with outputs matching the given pub key hash
 pub fn find_utxos(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
@@ -72,7 +73,7 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSe
 fn get_utxos_from_chain() -> UTXOSet {
     let mut utxo_map: UTXOSet = HashMap::new();
     // Map of spent tx out indexes to their respective tx ids
-    let mut spent_txo_idx_map: HashMap<[u8; 32], Vec<usize>> = HashMap::new();
+    let mut spent_txo_idx_map: HashMap<[u8; 32], Vec<u32>> = HashMap::new();
 
     // Get most recent block
     let last_hash = db::get_last_hash();
@@ -85,6 +86,9 @@ fn get_utxos_from_chain() -> UTXOSet {
             'outputs: for (out_idx, tx_out) in tx.outputs.iter().enumerate() {
                 // If any entries in the spent txo map for this tx contain the out current out idx,
                 // the out must be spent and therefore shouldn't be added to the utxo map.
+                let out_idx = out_idx
+                    .try_into()
+                    .expect("[utxo::get_utxos_from_chain] ERROR: Index too large for u32");
                 if let Some(spent_outs) = spent_txo_idx_map.get(&tx.id) {
                     if spent_outs.contains(&out_idx) {
                         continue 'outputs;
@@ -157,6 +161,9 @@ pub fn update_utxos(block: &Block) {
 
             // Add the new outputs as utxos for future txs
             for (out_idx, tx_out) in tx.outputs.iter().enumerate() {
+                let out_idx = out_idx
+                    .try_into()
+                    .expect("[utxo::update_utxos] ERROR: Index too large for u32");
                 db::put_utxo(&tx.id, out_idx, tx_out);
             }
         }
