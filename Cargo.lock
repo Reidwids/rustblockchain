@@ -260,6 +260,7 @@ dependencies = [
  "bincode",
  "clap",
  "hex",
+ "once_cell",
  "ripemd",
  "rocksdb",
  "secp256k1",

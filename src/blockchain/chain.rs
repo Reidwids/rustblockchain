@@ -1,7 +1,7 @@
 use rocksdb::IteratorMode;
 
 use crate::{
-    cli::db::{blockchain_exists, get_db, get_last_hash, open_db, put_db, LAST_HASH_KEY},
+    cli::db::{self, blockchain_exists, get_last_hash, ROCKS_DB},
     ownership::{address::Address, node::NODE_KEY},
 };
 
@@ -20,26 +20,21 @@ pub fn create_blockchain(addr: &Address) {
 
 /// Clears the existing chain. Retains the node id
 pub fn clear_blockchain() {
-    let db = open_db();
-
     let mut batch = rocksdb::WriteBatch::default();
 
-    for item in db.iterator(IteratorMode::Start).flatten() {
+    for item in ROCKS_DB.iterator(IteratorMode::Start).flatten() {
         let (key, _) = item;
         if key.as_ref() != NODE_KEY.as_bytes() {
             batch.delete(key.as_ref()); // Convert Box<[u8]> to &[u8]
         }
     }
 
-    db.write(batch)
+    ROCKS_DB
+        .write(batch)
         .expect("[chain::clear_blockchain] ERROR: Failed to delete blockchain");
 }
 
 pub fn get_last_block() -> Block {
-    let lh = get_last_hash();
-    let block_serialized =
-        get_db(&lh).expect("[block::get_last_block] ERROR: Could not get last block");
-    let block: Block = bincode::deserialize(&block_serialized)
-        .expect("[block::get_last_block] ERROR: Failed to deserialize last block");
-    block
+    let lh: [u8; 32] = get_last_hash();
+    db::get_block(&lh).expect("[block::get_last_block] ERROR: Could not get last block")
 }

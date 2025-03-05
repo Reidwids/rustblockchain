@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     blockchain::chain::get_last_block,
-    cli::db::{put_db, LAST_HASH_KEY},
+    cli::db,
     ownership::address::{bytes_to_hex_string, Address},
 };
 use serde::{Deserialize, Serialize};
@@ -104,11 +104,9 @@ impl Block {
 
         // Prepare block for db
         let block_hash = self.hash();
-        let block_data = bincode::serialize(self)
-            .expect("[chain::create_blockchain] ERROR: Failed to serialize genesis block");
         // Store block ref and last hash
-        put_db(&block_hash, &block_data);
-        put_db(LAST_HASH_KEY.as_bytes(), &block_hash);
+        db::put_block(&block_hash, self);
+        db::put_last_hash(&block_hash);
     }
 
     /// Hash the block into a single SHA256 hash

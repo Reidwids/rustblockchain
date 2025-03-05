@@ -3,11 +3,11 @@ use crate::{
         block::Block,
         chain::{clear_blockchain, create_blockchain, get_last_block},
         transaction::{
-            mempool::{get_mempool, put_mempool, reset_mempool},
-            tx::{coinbase_tx, Tx},
-            utxo::{find_utxos, reindex_utxos},
+            tx::Tx,
+            utxo::{find_utxos, reindex_utxos, update_utxos},
         },
     },
+    cli::db,
     ownership::{
         address::{bytes_to_hex_string, Address},
         node::get_node_id,
@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-use super::db::{get_block, get_last_hash};
+use super::db::get_block;
 
 pub fn handle_get_node_id() {
     let node_id = get_node_id();
@@ -110,7 +110,8 @@ pub fn handle_print_blockchain(show_txs: &bool) {
         }
 
         // Get the previous block
-        current_block = get_block(&current_block.prev_hash);
+        current_block = get_block(&current_block.prev_hash)
+            .expect("[handlers::handle_print_blockchain] ERROR: Failed to fetch previous block");
     }
 }
 
@@ -159,8 +160,8 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
     reindex_utxos();
 
     let tx = Tx::new(from_wallet, &to_address, value);
-    tx.remove_spent_utxos();
-    put_mempool(&tx);
+    db::put_mempool(&tx);
+
     println!(
         "Successfully added TX: Sent {} from {} to {}",
         value,
@@ -169,8 +170,9 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
     );
 
     if mine {
-        let mut new_block = Block::new(&get_mempool(), &from_wallet.get_wallet_address());
+        let mut new_block = Block::new(&db::get_mempool(), &from_wallet.get_wallet_address());
         new_block.mine();
-        reset_mempool();
+        update_utxos(&new_block);
+        db::reset_mempool();
     }
 }

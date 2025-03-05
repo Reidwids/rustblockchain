@@ -4,7 +4,6 @@ mod blockchain {
     pub mod block;
     pub mod merkle;
     pub mod transaction {
-        pub mod mempool;
         pub mod tx;
         pub mod utxo;
     }

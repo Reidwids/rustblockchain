@@ -8,7 +8,6 @@ use std::{
 
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use super::address::Address;
 
