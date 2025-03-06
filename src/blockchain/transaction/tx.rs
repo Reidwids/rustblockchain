@@ -201,7 +201,7 @@ impl Tx {
         if sum > value {
             outputs.push(TxOutput {
                 value: sum - value,
-                pub_key_hash: *to_address.pub_key_hash(),
+                pub_key_hash: *from_address.pub_key_hash(),
             });
         }
 
@@ -265,7 +265,7 @@ impl TxInput {
 }
 
 /// Create the coinbase tx
-pub fn coinbase_tx(to: &Address) -> Tx {
+pub fn coinbase_tx(reward_addr: &Address) -> Tx {
     // Coinbase txs will contain an arbitrary in, since there is no previous out
     let mut rand_data = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut rand_data);
@@ -287,7 +287,7 @@ pub fn coinbase_tx(to: &Address) -> Tx {
     // Create the tx out with the creator's pub key hash
     let tx_out = vec![TxOutput {
         value: COINBASE_REWARD, // Reward for coinbase tx is static
-        pub_key_hash: *to.pub_key_hash(),
+        pub_key_hash: *reward_addr.pub_key_hash(),
     }];
 
     // Create the tx with an empty id, and fill it with the tx hash

@@ -202,7 +202,13 @@ pub fn handle_mine(reward_addr: &Option<String>) {
         }
     }
 
-    let mut new_block = Block::new(&db::get_mempool(), &from_wallet.get_wallet_address());
+    let mempool = db::get_mempool();
+    if mempool.len() == 0 {
+        println!("No transactions to mine in mempool!");
+        return;
+    }
+
+    let mut new_block = Block::new(&mempool, &from_wallet.get_wallet_address());
     new_block.mine();
     update_utxos(&new_block);
     db::reset_mempool();

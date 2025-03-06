@@ -49,8 +49,8 @@ impl Block {
     }
 
     /// Create and mine a new block
-    pub fn new(txs: &Vec<Tx>, addr: &Address) -> Self {
-        let cbtx = coinbase_tx(addr);
+    pub fn new(txs: &Vec<Tx>, reward_addr: &Address) -> Self {
+        let cbtx = coinbase_tx(reward_addr);
         let prev_block = get_last_block();
         let mut all_txs = Vec::with_capacity(txs.len() + 1);
         all_txs.push(cbtx); // Add coinbase first
