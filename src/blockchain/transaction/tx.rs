@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use secp256k1::ecdsa::Signature;
 use secp256k1::rand::RngCore;
 use secp256k1::{rand, Message, PublicKey, Secp256k1, SecretKey};
@@ -7,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt::Debug;
 
+use crate::cli::db::get_utxo;
 use crate::ownership::address::{hash_pub_key, Address};
 use crate::ownership::wallet::Wallet;
 
@@ -126,7 +125,7 @@ impl Tx {
         }
     }
 
-    pub fn verify(&self, prev_txs: &HashMap<[u8; 32], Tx>) -> bool {
+    pub fn verify(&self) -> bool {
         // Coinbase txs do not need standard verification
         if self.is_coinbase() {
             return true;
@@ -136,14 +135,12 @@ impl Tx {
             let mut tx_copy = self.trimmed_copy();
 
             // Verify that the prev output pub key hash matches the pub key of the input
-            let prev_tx = prev_txs
-                .get(&input.prev_tx_id)
+            let prev_tx_out = get_utxo(&input.prev_tx_id, input.out)
                 .expect("[Tx::verify] ERROR: Previous tx missing!");
-            let prev_output = &prev_tx.outputs[input.out as usize];
             // Recompute the pub key hash from the input's public key
             let computed_pub_key_hash = hash_pub_key(&input.pub_key);
             // Check if the computed pub key hash matches the expected one
-            if computed_pub_key_hash != prev_output.pub_key_hash {
+            if computed_pub_key_hash != prev_tx_out.pub_key_hash {
                 println!("[Tx::verify] ERROR: PubKey does not match PubKeyHash!");
                 return false;
             }
@@ -227,21 +224,6 @@ pub struct TxOutput {
 }
 
 impl TxOutput {
-    /// Creates a new tx output given a value and a recipient address.
-    pub fn new(value: u32, addr: &Address) -> Self {
-        let mut txo = TxOutput {
-            value,
-            pub_key_hash: [0; 20],
-        };
-        txo.lock(addr);
-        txo
-    }
-
-    /// Locks a `txOutput` with the given address
-    pub fn lock(&mut self, addr: &Address) {
-        self.pub_key_hash.copy_from_slice(addr.pub_key_hash());
-    }
-
     /// Returns a boolean representing the comparison of the pub_key_hash to an incoming hash
     pub fn is_locked_with_key(&self, pub_key_hash: &[u8; 20]) -> bool {
         self.pub_key_hash == *pub_key_hash

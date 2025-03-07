@@ -76,6 +76,13 @@ impl Block {
         let mut hash: [u8; 32] = [0; 32];
         let max = u32::MAX;
 
+        println!("Validating block...");
+        for tx in &self.txs {
+            if !tx.verify() {
+                panic!("[block::mine] ERROR: Cannot mine block - validatation failed")
+            }
+        }
+        println!("Validation successful!");
         println!("Mining block:");
         while nonce < max {
             self.nonce = nonce;
