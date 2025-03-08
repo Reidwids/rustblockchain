@@ -6,8 +6,8 @@ use sha2::{Digest, Sha256};
 use std::fmt::Debug;
 
 use crate::cli::db::get_utxo;
-use crate::ownership::address::{hash_pub_key, Address};
-use crate::ownership::wallet::Wallet;
+use crate::wallets::address::{hash_pub_key, Address};
+use crate::wallets::wallet::Wallet;
 
 use super::utxo::find_spendable_utxos;
 
@@ -31,38 +31,6 @@ impl Tx {
         let hash = Sha256::digest(&serialized);
 
         hash.into() // Convert to [u8; 32]
-    }
-
-    /// Returns a human readable string of the transaction
-    pub fn to_string(&self) -> String {
-        let mut lines: Vec<String> = Vec::new();
-
-        lines.push(format!("--- Transaction {}:", hex::encode(self.id)));
-
-        for (i, input) in self.inputs.iter().enumerate() {
-            lines.push(format!("Input # {}:", i));
-            lines.push(format!("  Input TxID: {}", hex::encode(input.prev_tx_id)));
-            lines.push(format!("  Out: {}", input.out));
-            lines.push(format!(
-                "  Signature: {}",
-                hex::encode(input.signature.serialize_compact())
-            ));
-            lines.push(format!(
-                "  PubKey: {}",
-                hex::encode(input.pub_key.serialize())
-            ));
-        }
-
-        for (i, output) in self.outputs.iter().enumerate() {
-            lines.push(format!("Output {}:", i));
-            lines.push(format!("  Value: {}", output.value));
-            lines.push(format!(
-                "  PubKeyHash: {}",
-                hex::encode(&output.pub_key_hash)
-            ));
-        }
-
-        lines.join("\n")
     }
 
     /// Returns a copy of the given Tx without input pub keys and signatures.
@@ -236,14 +204,6 @@ pub struct TxInput {
     pub out: u32,             // Index that the output appears within the referenced transaction
     signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.
     pub_key: PublicKey, // The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
-}
-
-impl TxInput {
-    /// Test if a given address matches the locking pub key hash of the tx input
-    pub fn uses_key(&self, addr: &Address) -> bool {
-        let locking_hash = hash_pub_key(&self.pub_key);
-        return locking_hash == *addr.pub_key_hash();
-    }
 }
 
 /// Create the coinbase tx

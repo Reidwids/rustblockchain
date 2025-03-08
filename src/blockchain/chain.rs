@@ -2,7 +2,8 @@ use rocksdb::IteratorMode;
 
 use crate::{
     cli::db::{self, blockchain_exists, get_last_hash, ROCKS_DB},
-    ownership::{address::Address, node::NODE_KEY},
+    networking::node::NODE_KEY,
+    wallets::address::Address,
 };
 
 use super::block::Block;

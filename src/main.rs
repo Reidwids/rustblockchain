@@ -10,10 +10,12 @@ mod blockchain {
     }
     pub mod chain;
 }
-mod ownership {
+mod wallets {
     pub mod address;
-    pub mod node;
     pub mod wallet;
+}
+mod networking {
+    pub mod node;
 }
 mod cli {
     pub mod cli;

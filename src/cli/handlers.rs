@@ -8,9 +8,9 @@ use crate::{
         },
     },
     cli::db,
-    ownership::{
+    networking::node::get_node_id,
+    wallets::{
         address::{bytes_to_hex_string, Address},
-        node::get_node_id,
         wallet::{Wallet, WalletStore},
     },
 };

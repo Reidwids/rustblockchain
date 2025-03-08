@@ -7,7 +7,7 @@ use std::{
 use crate::{
     blockchain::chain::get_last_block,
     cli::db,
-    ownership::address::{bytes_to_hex_string, Address},
+    wallets::address::{bytes_to_hex_string, Address},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
