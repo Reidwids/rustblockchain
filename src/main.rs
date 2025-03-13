@@ -25,13 +25,7 @@ mod cli {
     pub mod handlers;
 }
 
-// fn main() {
-//     Cli::run();
-// }
-
 #[tokio::main]
 async fn main() {
-    if let Err(e) = start_p2p_network().await {
-        eprintln!("Error starting P2P network: {:?}", e);
-    }
+    Cli::run().await;
 }

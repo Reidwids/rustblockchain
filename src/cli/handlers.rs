@@ -8,7 +8,7 @@ use crate::{
         },
     },
     cli::db,
-    networking::node::Node,
+    networking::{node::Node, p2p::start_p2p_network},
     wallets::{
         address::{bytes_to_hex_string, Address},
         wallet::{Wallet, WalletStore},
@@ -20,6 +20,12 @@ use super::db::get_block;
 pub fn handle_get_node_id() {
     let node = Node::get_or_create_peer_id();
     println!("Node ID: {}", node.get_peer_id());
+}
+
+pub async fn handle_start_p2p(port: &Option<u16>) {
+    if let Err(e) = start_p2p_network(port).await {
+        eprintln!("Error starting P2P network: {:?}", e);
+    }
 }
 
 pub fn handle_create_wallet() {

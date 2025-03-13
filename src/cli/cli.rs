@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 use super::handlers::{
     handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_balance,
     handle_get_node_id, handle_get_wallets, handle_mine, handle_print_blockchain, handle_send_tx,
+    handle_start_p2p,
 };
 
 #[derive(Parser)]
@@ -19,6 +20,13 @@ enum Commands {
     /// Gets or generates a node ID
     #[command(about = "Generates a unique node identifier and stores it locally")]
     GetNodeId,
+
+    /// Start the p2p network
+    #[command(about = "Start the p2p network")]
+    StartP2P {
+        #[arg(short = 'p', long = "start_p2p")]
+        port: Option<u16>,
+    },
 
     /// Creates a new wallet
     #[command(about = "Creates a new wallet")]
@@ -69,11 +77,12 @@ enum Commands {
 }
 
 impl Cli {
-    pub fn run() {
+    pub async fn run() {
         let cli = Cli::parse();
 
         match &cli.command {
             Commands::GetNodeId => handle_get_node_id(),
+            Commands::StartP2P { port } => handle_start_p2p(port).await,
             Commands::CreateWallet => handle_create_wallet(),
             Commands::GetWallets => handle_get_wallets(),
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),

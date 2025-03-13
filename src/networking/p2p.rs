@@ -10,7 +10,7 @@ use std::{collections::HashMap, error::Error, time::Duration};
 
 pub type PeerCollection = HashMap<PeerId, Vec<Multiaddr>>;
 
-pub async fn start_p2p_network() -> Result<(), Box<dyn Error>> {
+pub async fn start_p2p_network(port: &Option<u16>) -> Result<(), Box<dyn Error>> {
     // Create a unique identifier for the node
     let node = Node::get_or_create_peer_id();
     println!("Local peer ID: {:?}", node.get_peer_id());
@@ -40,7 +40,8 @@ pub async fn start_p2p_network() -> Result<(), Box<dyn Error>> {
         .build();
 
     // Start listening for connections
-    let listen_addr: Multiaddr = "/ip4/0.0.0.0/tcp/4001".parse()?;
+    let port = port.unwrap_or(4001);
+    let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse()?;
     swarm.listen_on(listen_addr.clone())?;
 
     // Dial known seed nodes for initial connectivity
@@ -76,16 +77,12 @@ pub async fn start_p2p_network() -> Result<(), Box<dyn Error>> {
 }
 
 // Once deployed, introduce seed nodes
-// const SEED_NODES: [&str; 2] = [
-//     "/ip4/203.0.113.0/tcp/4001",
-//     "/ip4/198.51.100.5/tcp/4001",
-// ];
+const SEED_NODES: [&str; 2] = ["/ip4/127.0.0.1/tcp/4001", "/ip4/127.0.0.1/tcp/4002"];
 fn get_seed_nodes() -> Vec<Multiaddr> {
-    // SEED_NODES
-    //     .iter()
-    //     .map(|addr| addr.parse().expect("Invalid Multiaddr"))
-    //     .collect();
-    Vec::new()
+    SEED_NODES
+        .iter()
+        .map(|addr| addr.parse().expect("Invalid Multiaddr"))
+        .collect()
 }
 
 // pub fn broadcast_tx() {}
