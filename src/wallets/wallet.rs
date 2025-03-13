@@ -36,8 +36,8 @@ impl Wallet {
         Address::new_from_key(self.public_key)
     }
 
-    pub fn pub_key(&self) -> PublicKey {
-        self.public_key
+    pub fn pub_key(&self) -> &PublicKey {
+        &self.public_key
     }
 
     pub fn private_key(&self) -> &SecretKey {

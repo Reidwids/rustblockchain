@@ -1,21 +1,28 @@
 use std::sync::Arc;
 
+use libp2p::PeerId;
 use once_cell::sync::Lazy;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, DB};
 
-use crate::blockchain::{
-    block::Block,
-    transaction::{
-        mempool::Mempool,
-        tx::{Tx, TxOutput},
+use crate::{
+    blockchain::{
+        block::Block,
+        transaction::{
+            mempool::Mempool,
+            tx::{Tx, TxOutput},
+        },
     },
+    networking::p2p::PeerCollection,
 };
 
-pub const DB_PATH: &str = "./data/db";
 pub const LAST_HASH_KEY: &str = "lh";
-const BLOCK_CF: &str = "block";
-const UTXO_CF: &str = "utxo";
 const MEMPOOL_KEY: &str = "mempool";
+const PEERS_KEY: &str = "peers";
+
+const UTXO_CF: &str = "utxo";
+const BLOCK_CF: &str = "block";
+
+pub const DB_PATH: &str = "./data/db";
 
 // Our db will hold 3 types of kv pairs - an "lh" / hash pair to store our last hash,
 // hash / block pairs to store and retrieve each block, and utxos
@@ -147,11 +154,39 @@ pub fn put_mempool(tx: &Tx) {
         bincode::serialize(&mempool).expect("[db::put_mempool] ERROR: Failed to serialize tx");
     ROCKS_DB
         .put(MEMPOOL_KEY, serialized)
-        .expect("[db::put_last_hash] ERROR: Failed to write to DB");
+        .expect("[db::put_mempool] ERROR: Failed to write to DB");
 }
 
 /// Delete all mempool entries by deleting the mempool key
 pub fn reset_mempool() {
     // Delete the mempool key, effectively resetting the entire mempool. No error on failure
     let _ = ROCKS_DB.delete(MEMPOOL_KEY);
+}
+
+/*** Peer handlers ***/
+
+pub fn get_peers() -> PeerCollection {
+    let peers_data = ROCKS_DB.get(PEERS_KEY.as_bytes()).unwrap();
+    peers_data
+        .and_then(|data| bincode::deserialize::<PeerCollection>(&data).ok())
+        .unwrap_or_else(PeerCollection::new)
+}
+
+pub fn put_peer(peer_id: PeerId, addr: libp2p::Multiaddr) {
+    let mut peers = get_peers();
+
+    if !peers.get(&peer_id).unwrap_or(&vec![]).contains(&addr) {
+        peers
+            .entry(peer_id)
+            // If the entry doesn't exist, create a new Vec<Multiaddr>
+            .or_insert_with(Vec::new)
+            .push(addr); // Add the new address to the vector
+    }
+
+    ROCKS_DB
+        .put(
+            PEERS_KEY,
+            bincode::serialize(&peers).expect("[db::put_peer] ERROR: Failed to serialize peers"),
+        )
+        .expect("[db::put_peer] ERROR: Failed to write to DB");
 }

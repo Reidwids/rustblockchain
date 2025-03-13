@@ -152,7 +152,7 @@ impl Tx {
                 prev_tx_id: tx_id,
                 out: out_idx,
                 signature: empty_signature(),
-                pub_key: from_wallet.pub_key(),
+                pub_key: *from_wallet.pub_key(),
             });
         }
 

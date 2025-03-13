@@ -1,4 +1,5 @@
 use cli::cli::Cli;
+use networking::p2p::start_p2p_network;
 
 mod blockchain {
     pub mod block;
@@ -16,6 +17,7 @@ mod wallets {
 }
 mod networking {
     pub mod node;
+    pub mod p2p;
 }
 mod cli {
     pub mod cli;
@@ -23,6 +25,13 @@ mod cli {
     pub mod handlers;
 }
 
-fn main() {
-    Cli::run();
+// fn main() {
+//     Cli::run();
+// }
+
+#[tokio::main]
+async fn main() {
+    if let Err(e) = start_p2p_network().await {
+        eprintln!("Error starting P2P network: {:?}", e);
+    }
 }

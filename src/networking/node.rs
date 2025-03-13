@@ -1,27 +1,48 @@
-use crate::cli::db::DB_PATH;
-use rocksdb::DB;
-use uuid::Uuid;
+use crate::cli::db::ROCKS_DB;
+use libp2p::{identity, PeerId};
 
 pub const NODE_KEY: &str = "node_id";
 
-/// Get or create the local node ID.
-pub fn get_node_id() -> Uuid {
-    let db = DB::open_default(DB_PATH).expect("[node::get_node_id] ERROR: Failed to open RocksDB");
+pub struct Node {
+    private_key: identity::Keypair,
+    public_key: PeerId,
+}
 
-    // Try to fetch existing node id
-    if let Ok(Some(uuid_bytes)) = db.get(NODE_KEY) {
-        let uuid_str = String::from_utf8(uuid_bytes)
-            .expect("[node::get_node_id] ERROR: Invalid UUID format in DB");
-        if let Ok(uuid) = Uuid::parse_str(&uuid_str) {
-            return uuid;
+impl Node {
+    /// Get or create the local node ID.
+    pub fn get_or_create_peer_id() -> Self {
+        // Try to fetch existing node id
+        if let Ok(Some(peer_id_privk_bytes)) = ROCKS_DB.get(NODE_KEY) {
+            if let Ok(private_key) = identity::Keypair::ed25519_from_bytes(peer_id_privk_bytes) {
+                return Self {
+                    public_key: PeerId::from_public_key(&private_key.public()),
+                    private_key,
+                };
+            }
+        }
+
+        // Else create the node id
+        let private_key = identity::Keypair::generate_ed25519();
+        let encoded = private_key
+            .to_protobuf_encoding()
+            .expect("[node::get_or_create_peer_id] ERROR: Failed to encode node private key");
+
+        // Store it in RocksDB
+        ROCKS_DB
+            .put(NODE_KEY, encoded)
+            .expect("[node::get_or_create_peer_id] ERROR: Failed to store node id in RocksDB");
+
+        Self {
+            public_key: PeerId::from_public_key(&private_key.public()),
+            private_key,
         }
     }
 
-    // Else create the Uuid
-    let new_uuid = Uuid::new_v4();
-    // Store it in RocksDB
-    db.put(NODE_KEY, new_uuid.to_string().as_bytes())
-        .expect("[node::get_node_id] ERROR: Failed to store node UUID in RocksDB");
+    pub fn get_peer_id(&self) -> &PeerId {
+        &self.public_key
+    }
 
-    new_uuid
+    pub fn get_priv_key(&self) -> &identity::Keypair {
+        &self.private_key
+    }
 }

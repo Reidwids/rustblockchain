@@ -8,7 +8,7 @@ use crate::{
         },
     },
     cli::db,
-    networking::node::get_node_id,
+    networking::node::Node,
     wallets::{
         address::{bytes_to_hex_string, Address},
         wallet::{Wallet, WalletStore},
@@ -18,8 +18,8 @@ use crate::{
 use super::db::get_block;
 
 pub fn handle_get_node_id() {
-    let node_id = get_node_id();
-    println!("Node ID: {}", node_id);
+    let node = Node::get_or_create_peer_id();
+    println!("Node ID: {}", node.get_peer_id());
 }
 
 pub fn handle_create_wallet() {
