@@ -1,5 +1,4 @@
 use cli::cli::Cli;
-use networking::p2p::start_p2p_network;
 
 mod blockchain {
     pub mod block;
@@ -18,6 +17,7 @@ mod wallets {
 mod networking {
     pub mod node;
     pub mod p2p;
+    pub mod rest_api;
 }
 mod cli {
     pub mod cli;

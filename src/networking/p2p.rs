@@ -1,16 +1,75 @@
-use crate::{cli::db, networking::node::Node};
+use crate::{
+    blockchain::{block::Block, transaction::tx::Tx},
+    cli::db,
+    networking::node::Node,
+    wallets::address::bytes_to_hex_string,
+};
 use libp2p::{
     futures::StreamExt,
     kad::{store::MemoryStore, Behaviour, Event},
     noise,
     swarm::SwarmEvent,
-    tcp, yamux, Multiaddr, PeerId, SwarmBuilder,
+    tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
 };
 use std::{collections::HashMap, error::Error, time::Duration};
+use tokio::sync::mpsc;
+
+pub enum P2PMessage {
+    HealthCheck(),
+    BroadcastTransaction(Tx), // TODO: Refactor types
+    BroadcastBlock(Block),
+}
 
 pub type PeerCollection = HashMap<PeerId, Vec<Multiaddr>>;
 
-pub async fn start_p2p_network(port: &Option<u16>) -> Result<(), Box<dyn Error>> {
+pub async fn start_p2p_network(
+    mut rx: mpsc::Receiver<P2PMessage>,
+    port: Option<u16>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut swarm = setup_swarm(port);
+    loop {
+        tokio::select! {
+                event = swarm.select_next_some() => {
+                    match event {
+
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("P2P network listening on {address:?}");
+                    }
+                    SwarmEvent::Behaviour(Event::RoutingUpdated {
+                        peer, addresses, ..
+                    }) => {
+                        for addr in addresses.iter() {
+                            db::put_peer(peer.clone(), addr.clone());
+                        }
+                        println!("Connected to peer: {:?}", peer);
+                    }
+                    SwarmEvent::ConnectionEstablished {
+                        peer_id, endpoint, ..
+                    } => {
+                        println!("Connection established with {peer_id} at {:?}", endpoint);
+                        db::put_peer(peer_id, endpoint.get_remote_address().clone());
+                    }
+                    _ => {}
+                }
+            }
+            Some(message) = rx.recv() => {
+                match message {
+                    P2PMessage::HealthCheck() => {
+                        println!("P2P Channel received msg");
+                    }
+                    P2PMessage::BroadcastTransaction(tx) => {
+                        println!("Broadcasting transaction: {}", bytes_to_hex_string(&tx.id));
+                    }
+                    P2PMessage::BroadcastBlock(block) => {
+                        println!("Broadcasting block: {}", bytes_to_hex_string(&block.hash));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn setup_swarm(port: Option<u16>) -> Swarm<Behaviour<MemoryStore>> {
     // Create a unique identifier for the node
     let node = Node::get_or_create_peer_id();
     println!("Local peer ID: {:?}", node.get_peer_id());
@@ -33,16 +92,18 @@ pub async fn start_p2p_network(port: &Option<u16>) -> Result<(), Box<dyn Error>>
             tcp::Config::default(), // Configures tcp as the chosen transport layer
             noise::Config::new, // Adds the noise protocol, which adds encryption to tcp connections
             yamux::Config::default, // Multiplexing, allowing simultaneous data streams over a single connection
-        )?
-        .with_behaviour(|_| kad_behaviour)?
+        )
+        .unwrap()
+        .with_behaviour(|_| kad_behaviour)
+        .unwrap()
         // Extend idle connection time, since nodes may need long connections to propogate txs, sync blocks, etc.
         .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
         .build();
 
     // Start listening for connections
     let port = port.unwrap_or(4001);
-    let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse()?;
-    swarm.listen_on(listen_addr.clone())?;
+    let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
+    swarm.listen_on(listen_addr.clone()).unwrap();
 
     // Dial known seed nodes for initial connectivity
     for seed in get_seed_nodes() {
@@ -52,28 +113,7 @@ pub async fn start_p2p_network(port: &Option<u16>) -> Result<(), Box<dyn Error>>
         }
     }
 
-    loop {
-        match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening on {address:?}");
-            }
-            SwarmEvent::Behaviour(Event::RoutingUpdated {
-                peer, addresses, ..
-            }) => {
-                for addr in addresses.iter() {
-                    db::put_peer(peer.clone(), addr.clone());
-                }
-                println!("Connected to peer: {:?}", peer);
-            }
-            SwarmEvent::ConnectionEstablished {
-                peer_id, endpoint, ..
-            } => {
-                println!("Connection established with {peer_id} at {:?}", endpoint);
-                db::put_peer(peer_id, endpoint.get_remote_address().clone());
-            }
-            _ => {}
-        }
-    }
+    swarm
 }
 
 // Once deployed, introduce seed nodes

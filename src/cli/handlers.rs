@@ -1,3 +1,5 @@
+use tokio::sync::mpsc;
+
 use crate::{
     blockchain::{
         block::Block,
@@ -8,7 +10,7 @@ use crate::{
         },
     },
     cli::db,
-    networking::{node::Node, p2p::start_p2p_network},
+    networking::{node::Node, p2p::start_p2p_network, rest_api::start_rest_api},
     wallets::{
         address::{bytes_to_hex_string, Address},
         wallet::{Wallet, WalletStore},
@@ -22,10 +24,15 @@ pub fn handle_get_node_id() {
     println!("Node ID: {}", node.get_peer_id());
 }
 
-pub async fn handle_start_p2p(port: &Option<u16>) {
-    if let Err(e) = start_p2p_network(port).await {
-        eprintln!("Error starting P2P network: {:?}", e);
-    }
+pub async fn handle_start_node(rest_api_port: &Option<u16>, p2p_port: &Option<u16>) {
+    // Create a channel to pass messages from the server to the p2p network
+    let (tx, rx) = mpsc::channel(32);
+
+    // Spawn the P2P network task
+    tokio::spawn(start_p2p_network(rx, *p2p_port));
+
+    // Start the HTTP server
+    start_rest_api(tx, *rest_api_port).await;
 }
 
 pub fn handle_create_wallet() {
