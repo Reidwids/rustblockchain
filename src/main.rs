@@ -16,8 +16,14 @@ mod wallets {
 }
 mod networking {
     pub mod node;
-    pub mod p2p;
-    pub mod rest_api;
+    pub mod p2p {
+        pub mod handlers;
+        pub mod network;
+    }
+    pub mod server {
+        pub mod handlers;
+        pub mod rest_api;
+    }
 }
 mod cli {
     pub mod cli;

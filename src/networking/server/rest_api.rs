@@ -1,6 +1,5 @@
-use crate::blockchain::transaction::tx::Tx;
+use crate::{blockchain::transaction::tx::Tx, networking::p2p::network::P2PMessage};
 
-use super::p2p::P2PMessage;
 use axum::{
     extract::State,
     http::StatusCode,

@@ -1,0 +1,9 @@
+// pub fn handle_broadcast_inv() {}
+// pub fn handle_broadcast_tx() {}
+// pub fn handle_broadcast_block() {}
+// pub fn handle_receive_inv() {}
+// pub fn handle_receive_tx() {}
+// pub fn handle_receive_block() {}
+// pub fn sync_blocks() {}
+// - handle block race
+// - handle bad txs

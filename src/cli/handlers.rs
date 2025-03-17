@@ -10,7 +10,7 @@ use crate::{
         },
     },
     cli::db,
-    networking::{node::Node, p2p::start_p2p_network, rest_api::start_rest_api},
+    networking::{node::Node, p2p::network::start_p2p_network, server::rest_api::start_rest_api},
     wallets::{
         address::{bytes_to_hex_string, Address},
         wallet::{Wallet, WalletStore},

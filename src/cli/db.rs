@@ -12,7 +12,7 @@ use crate::{
             tx::{Tx, TxOutput},
         },
     },
-    networking::p2p::PeerCollection,
+    networking::p2p::network::PeerCollection,
 };
 
 pub const LAST_HASH_KEY: &str = "lh";

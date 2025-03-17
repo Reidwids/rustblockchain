@@ -73,6 +73,8 @@ fn setup_swarm(port: Option<u16>) -> Swarm<Behaviour<MemoryStore>> {
     // Create a unique identifier for the node
     let node = Node::get_or_create_peer_id();
     println!("Local peer ID: {:?}", node.get_peer_id());
+    let port = port.unwrap_or(4001);
+    let p2p_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
 
     let store = MemoryStore::new(node.get_peer_id().clone());
     // Define network behavior - init kademlia for peer discovery over the web
@@ -82,7 +84,9 @@ fn setup_swarm(port: Option<u16>) -> Swarm<Behaviour<MemoryStore>> {
     let peer_addresses = db::get_peers();
     for (peer_id, addresses) in peer_addresses {
         for addr in addresses {
-            kad_behaviour.add_address(&peer_id, addr);
+            if addr != p2p_addr {
+                kad_behaviour.add_address(&peer_id, addr);
+            }
         }
     }
 
@@ -101,9 +105,7 @@ fn setup_swarm(port: Option<u16>) -> Swarm<Behaviour<MemoryStore>> {
         .build();
 
     // Start listening for connections
-    let port = port.unwrap_or(4001);
-    let listen_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
-    swarm.listen_on(listen_addr.clone()).unwrap();
+    swarm.listen_on(p2p_addr.clone()).unwrap();
 
     // Dial known seed nodes for initial connectivity
     for seed in get_seed_nodes() {
@@ -124,8 +126,3 @@ fn get_seed_nodes() -> Vec<Multiaddr> {
         .map(|addr| addr.parse().expect("Invalid Multiaddr"))
         .collect()
 }
-
-// pub fn broadcast_tx() {}
-// pub fn broadcast_block() {}
-// pub fn handle_p2p_msg() {}
-// pub fn sync_blocks() {}
