@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     io::Write,
     time::{SystemTime, UNIX_EPOCH},
     u32,
@@ -29,9 +30,9 @@ pub struct Block {
 
 impl Block {
     /// Create the genesis block from a coinbase transaction
-    pub fn genesis(addr: &Address) -> Self {
-        let cbtx = coinbase_tx(addr);
-        Block {
+    pub fn genesis(addr: &Address) -> Result<Self, Box<dyn Error>> {
+        let cbtx = coinbase_tx(addr)?;
+        Ok(Block {
             hash: [0u8; 32], // Initialize as empty
             txs: vec![cbtx],
             prev_hash: [0u8; 32],
@@ -41,7 +42,7 @@ impl Block {
                 .duration_since(UNIX_EPOCH)
                 .expect("[Block::new] ERROR: Failed to create timestamp")
                 .as_secs(),
-        }
+        })
     }
 
     pub fn is_genesis(&self) -> bool {
@@ -49,14 +50,14 @@ impl Block {
     }
 
     /// Create and mine a new block
-    pub fn new(txs: &Vec<Tx>, reward_addr: &Address) -> Self {
-        let cbtx = coinbase_tx(reward_addr);
-        let prev_block = get_last_block();
+    pub fn new(txs: &Vec<Tx>, reward_addr: &Address) -> Result<Self, Box<dyn Error>> {
+        let cbtx = coinbase_tx(reward_addr)?;
+        let prev_block = get_last_block()?;
         let mut all_txs = Vec::with_capacity(txs.len() + 1);
         all_txs.push(cbtx); // Add coinbase first
         all_txs.extend_from_slice(txs); // Add the rest of the transactions
 
-        Block {
+        Ok(Block {
             hash: [0u8; 32], // Initialize as empty
             txs: all_txs,
             prev_hash: prev_block.hash,
@@ -66,11 +67,11 @@ impl Block {
                 .duration_since(UNIX_EPOCH)
                 .expect("[Block::new] ERROR: Failed to create timestamp")
                 .as_secs(),
-        }
+        })
     }
 
     /// Mines a designated block using proof of work
-    pub fn mine(&mut self) {
+    pub fn mine(&mut self) -> Result<(), Box<dyn Error>> {
         let target = get_target_difficulty();
         let mut nonce: u32 = 0;
         let mut hash: [u8; 32] = [0; 32];
@@ -78,15 +79,14 @@ impl Block {
 
         println!("Validating block...");
         for tx in &self.txs {
-            if !tx.verify() {
-                panic!("[block::mine] ERROR: Cannot mine block - validatation failed")
-            }
+            tx.verify()
+                .map_err(|e| format!("[block::mine] ERROR: Cannot mine block - {:?}", e))?;
         }
         println!("Validation successful!");
         println!("Mining block:");
         while nonce < max {
             self.nonce = nonce;
-            hash = self.hash();
+            hash = self.hash()?;
 
             // Print hash repeating over same line
             let hex_str = bytes_to_hex_string(&hash);
@@ -110,31 +110,40 @@ impl Block {
         println!("Nonce: {}", nonce);
 
         // Prepare block for db
-        let block_hash = self.hash();
+        let block_hash = self.hash()?;
         // Store block ref and last hash
         db::put_block(&block_hash, self);
         db::put_last_hash(&block_hash);
+        Ok(())
     }
 
     /// Hash the block into a single SHA256 hash
-    pub fn hash(&self) -> [u8; 32] {
+    pub fn hash(&self) -> Result<[u8; 32], Box<dyn Error>> {
         let mut hasher = Sha256::new();
         hasher.update(self.prev_hash);
-        hasher.update(self.hash_txs());
+        hasher.update(self.hash_txs()?);
         // Use little-endian for consitency
         hasher.update(self.nonce.to_le_bytes());
         hasher.update(self.height.to_le_bytes());
         hasher.update(self.timestamp.to_le_bytes());
 
         let result = hasher.finalize();
-        result.into()
+        Ok(result.into())
     }
 
     /// Using a Merkle tree, derive the hash of a root block's transactions
-    fn hash_txs(&self) -> [u8; 32] {
-        let tx_hashes = self.txs.iter().map(|tx| tx.hash().to_vec()).collect();
+    fn hash_txs(&self) -> Result<[u8; 32], Box<dyn Error>> {
+        let tx_hashes: Result<Vec<Vec<u8>>, Box<dyn Error>> = self
+            .txs
+            .iter()
+            .map(|tx| tx.hash().map(|h| h.to_vec()))
+            .collect();
+
+        let tx_hashes = tx_hashes?;
+
         let tree = MerkleTree::new(tx_hashes);
-        tree.root.hash
+
+        Ok(tree.root.hash)
     }
 }
 

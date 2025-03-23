@@ -36,14 +36,18 @@ pub async fn handle_start_node(rest_api_port: &Option<u16>, p2p_port: &Option<u1
 }
 
 pub fn handle_create_wallet() {
-    let mut wallet_store = WalletStore::init_wallet_store();
-    let addr = wallet_store.add_wallet();
+    let mut wallet_store = WalletStore::init_wallet_store()
+        .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
+    let addr = wallet_store
+        .add_wallet()
+        .expect("[WalletStore::add_wallet] Failed to add wallet to wallet store");
 
     println!("New wallet address: {:?}", addr.get_full_address());
 }
 
 pub fn handle_get_wallets() {
-    let wallet_store = WalletStore::init_wallet_store();
+    let wallet_store = WalletStore::init_wallet_store()
+        .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
     if wallet_store.wallets.is_empty() {
         println!("No wallets found! Try creating a new wallet")
     }
@@ -55,10 +59,13 @@ pub fn handle_get_wallets() {
 pub fn handle_create_blockchain(req_addr: &Option<String>) {
     let address: Address;
     match req_addr {
-        Some(a) => address = Address::new_from_str(a),
+        Some(a) => address = Address::new_from_str(a).unwrap(),
         None => {
-            let mut wallet_store = WalletStore::init_wallet_store();
-            address = wallet_store.add_wallet();
+            let mut wallet_store = WalletStore::init_wallet_store()
+                .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
+            address = wallet_store
+                .add_wallet()
+                .expect("[WalletStore::add_wallet] Failed to add wallet to wallet store");
             println!("Wallet address not provided");
             println!(
                 "Created new local wallet to receive mining rewards: {}",
@@ -66,7 +73,7 @@ pub fn handle_create_blockchain(req_addr: &Option<String>) {
             );
         }
     }
-    create_blockchain(&address);
+    create_blockchain(&address).unwrap();
     println!("Successfully created blockchain!");
     println!("Mining rewards sent to {}", address.get_full_address());
 }
@@ -77,7 +84,7 @@ pub fn handle_clear_blockchain() {
 }
 
 pub fn handle_print_blockchain(show_txs: &bool) {
-    let mut current_block = get_last_block();
+    let mut current_block = get_last_block().unwrap();
 
     loop {
         println!("====================================");
@@ -124,13 +131,14 @@ pub fn handle_print_blockchain(show_txs: &bool) {
 
         // Get the previous block
         current_block = get_block(&current_block.prev_hash)
+            .unwrap()
             .expect("[handlers::handle_print_blockchain] ERROR: Failed to fetch previous block");
     }
 }
 
 pub fn handle_get_balance(req_addr: &String) {
-    let address = Address::new_from_str(req_addr);
-    reindex_utxos();
+    let address = Address::new_from_str(req_addr).unwrap();
+    reindex_utxos().unwrap();
 
     let utxos = find_utxos(address.pub_key_hash());
 
@@ -145,7 +153,8 @@ pub fn handle_get_balance(req_addr: &String) {
 }
 
 pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool) {
-    let wallet_store = WalletStore::init_wallet_store();
+    let wallet_store = WalletStore::init_wallet_store()
+        .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
     let from_wallet: &Wallet;
     match from {
         Some(addr) => {
@@ -169,10 +178,10 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
         }
     }
 
-    let to_address = Address::new_from_str(to.as_str());
-    reindex_utxos();
+    let to_address = Address::new_from_str(to.as_str()).unwrap();
+    reindex_utxos().unwrap();
 
-    let tx = Tx::new(from_wallet, &to_address, value);
+    let tx = Tx::new(from_wallet, &to_address, value).unwrap();
     db::put_mempool(&tx);
 
     println!(
@@ -183,15 +192,17 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
     );
 
     if mine {
-        let mut new_block = Block::new(&db::get_mempool(), &from_wallet.get_wallet_address());
-        new_block.mine();
-        update_utxos(&new_block);
+        let mut new_block =
+            Block::new(&db::get_mempool(), &from_wallet.get_wallet_address()).unwrap();
+        new_block.mine().unwrap();
+        update_utxos(&new_block).unwrap();
         db::reset_mempool();
     }
 }
 
 pub fn handle_mine(reward_addr: &Option<String>) {
-    let wallet_store = WalletStore::init_wallet_store();
+    let wallet_store = WalletStore::init_wallet_store()
+        .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
     let from_wallet: &Wallet;
     match reward_addr {
         Some(addr) => {
@@ -221,8 +232,8 @@ pub fn handle_mine(reward_addr: &Option<String>) {
         return;
     }
 
-    let mut new_block = Block::new(&mempool, &from_wallet.get_wallet_address());
-    new_block.mine();
-    update_utxos(&new_block);
+    let mut new_block = Block::new(&mempool, &from_wallet.get_wallet_address()).unwrap();
+    new_block.mine().unwrap();
+    update_utxos(&new_block).unwrap();
     db::reset_mempool();
 }

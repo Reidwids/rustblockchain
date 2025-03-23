@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 
 use rocksdb::IteratorMode;
 
@@ -72,15 +72,19 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSe
 }
 
 /// Builds a hashmap containing the UTXO set from the chain found in the database.
-fn get_utxos_from_chain() -> UTXOSet {
+fn get_utxos_from_chain() -> Result<UTXOSet, Box<dyn Error>> {
     let mut utxo_map: UTXOSet = HashMap::new();
     // Map of spent tx out indexes to their respective tx ids
     let mut spent_txo_idx_map: HashMap<[u8; 32], Vec<u32>> = HashMap::new();
 
     // Get most recent block
-    let last_hash = db::get_last_hash();
-    let mut current_block = db::get_block(&last_hash)
-        .expect("[utxo::get_utxos_from_chain] ERROR: Could not find block from last hash");
+    let last_hash = db::get_last_hash()?;
+    let mut current_block = db::get_block(&last_hash)?.ok_or_else(|| {
+        format!(
+            "[utxo::get_utxos_from_chain] ERROR: Could not find block from last hash {:?}",
+            last_hash
+        )
+    })?;
 
     loop {
         for tx in &current_block.txs {
@@ -116,42 +120,52 @@ fn get_utxos_from_chain() -> UTXOSet {
             break;
         }
         // Otherwise, get the next block
-        current_block = db::get_block(&current_block.prev_hash)
-            .expect("[utxo::get_utxos_from_chain] ERROR: Could not find next block");
+        current_block = db::get_block(&current_block.prev_hash)?.ok_or_else(|| {
+            format!(
+                "[utxo::get_utxos_from_chain] ERROR: Could not find next block {:?}",
+                current_block.prev_hash
+            )
+        })?;
     }
-    utxo_map
+    Ok(utxo_map)
 }
 
 /// Delete all utxos stored in the db
-fn delete_all_utxos() {
+fn delete_all_utxos() -> Result<(), Box<dyn Error>> {
     let iter = ROCKS_DB.iterator_cf(utxo_cf(), IteratorMode::Start);
 
     for res in iter {
-        match res {
-            Err(_) => {
-                panic!("[utxo::delete_all_utxos] ERROR: Failed to iterate through db")
-            }
-            Ok((key, _)) => ROCKS_DB
-                .delete(key)
-                .expect("[utxo::delete_all_utxos] ERROR: Failed to delete key"),
+        let (key, _) =
+            res.map_err(|_| "[utxo::delete_all_utxos] ERROR: Failed to iterate through db")?;
+
+        if let Err(e) = ROCKS_DB.delete(key) {
+            return Err(format!(
+                "[utxo::delete_all_utxos] ERROR: Failed to delete key: {}",
+                e
+            )
+            .into());
         }
     }
+
+    Ok(())
 }
 
 /// Reindexes utxos in db. Deletes all existing and uses the chain from the db
 /// to rebuild all utxos in the db.
-pub fn reindex_utxos() {
-    delete_all_utxos();
-    let utxos = get_utxos_from_chain();
+pub fn reindex_utxos() -> Result<(), Box<dyn Error>> {
+    delete_all_utxos()?;
+    let utxos = get_utxos_from_chain()?;
 
     // Loop through all retrieved utxos and add them to the db with utxo prefix
     for ((tx_id, out_idx), tx_out) in utxos {
-        db::put_utxo(&tx_id, out_idx, &tx_out);
+        db::put_utxo(&tx_id, out_idx, &tx_out)?;
     }
+
+    Ok(())
 }
 
 /// Update utxos with a new block
-pub fn update_utxos(block: &Block) {
+pub fn update_utxos(block: &Block) -> Result<(), Box<dyn Error>> {
     for tx in &block.txs {
         if !tx.is_coinbase() {
             // Loop through tx in's in new block to check if they're spent
@@ -166,8 +180,9 @@ pub fn update_utxos(block: &Block) {
                 let out_idx = out_idx
                     .try_into()
                     .expect("[utxo::update_utxos] ERROR: Index too large for u32");
-                db::put_utxo(&tx.id, out_idx, tx_out);
+                db::put_utxo(&tx.id, out_idx, tx_out)?;
             }
         }
     }
+    Ok(())
 }

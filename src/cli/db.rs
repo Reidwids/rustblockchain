@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{error::Error, sync::Arc};
 
 use libp2p::PeerId;
 use once_cell::sync::Lazy;
@@ -76,12 +76,15 @@ pub fn get_utxo(tx_id: &[u8; 32], out_idx: u32) -> Option<TxOutput> {
     utxo_data.and_then(|data| bincode::deserialize(&data).ok())
 }
 
-pub fn put_utxo(tx_id: &[u8; 32], out_idx: u32, tx_out: &TxOutput) {
-    let serialized =
-        bincode::serialize(&tx_out).expect("[db::put_utxo] ERROR: Serialization failed");
+pub fn put_utxo(tx_id: &[u8; 32], out_idx: u32, tx_out: &TxOutput) -> Result<(), Box<dyn Error>> {
+    let serialized = bincode::serialize(&tx_out)
+        .map_err(|e| format!("[db::put_utxo] ERROR: Serialization failed {:?}", e))?;
+
     ROCKS_DB
         .put_cf(utxo_cf(), to_utxo_db_key(tx_id, out_idx), serialized)
-        .expect("[db::put_utxo] ERROR: Failed to write to DB");
+        .map_err(|e| format!("[db::put_utxo] ERROR: Failed to write to DB {:?}", e))?;
+
+    Ok(())
 }
 
 pub fn delete_utxo(tx_id: &[u8; 32], out_idx: u32) {
@@ -98,11 +101,20 @@ pub fn block_cf() -> &'static ColumnFamily {
         .expect("Column family not found")
 }
 
-pub fn get_block(block_hash: &[u8; 32]) -> Option<Block> {
+pub fn get_block(block_hash: &[u8; 32]) -> Result<Option<Block>, Box<dyn Error>> {
     let block_data = ROCKS_DB
         .get_cf(block_cf(), block_hash)
-        .expect("[db::get_block] ERROR: Failed to read from DB");
-    block_data.and_then(|data| bincode::deserialize(&data).ok())
+        .map_err(|e| format!("[db::get_block] ERROR: Failed to read from DB {:?}", e))?;
+
+    match block_data {
+        Some(data) => {
+            let block: Block = bincode::deserialize(&data).map_err(|e| {
+                format!("[db::get_block] ERROR: Failed to deserialize block {:?}", e)
+            })?;
+            Ok(Some(block))
+        }
+        None => Ok(None),
+    }
 }
 
 pub fn put_block(block_hash: &[u8; 32], block_data: &Block) {
@@ -122,14 +134,19 @@ pub fn blockchain_exists() -> bool {
         .is_some()
 }
 
-pub fn get_last_hash() -> [u8; 32] {
-    let last_hash = ROCKS_DB
-        .get(LAST_HASH_KEY.as_bytes())
-        .unwrap()
-        .expect("[db::get_last_hash] ERROR: Failed to get last hash from the db");
-    last_hash
+pub fn get_last_hash() -> Result<[u8; 32], Box<dyn Error>> {
+    let last_hash: [u8; 32] = ROCKS_DB
+        .get(LAST_HASH_KEY.as_bytes())?
+        .ok_or_else(|| "[db::get_last_hash] ERROR: No last hash found in the db")?
         .try_into()
-        .expect("[db::get_last_hash] ERROR: Failed to parse last hash")
+        .map_err(|e| {
+            format!(
+                "[db::get_last_hash] ERROR: Failed to parse last hash: {:?}",
+                e
+            )
+        })?;
+
+    Ok(last_hash)
 }
 
 pub fn put_last_hash(last_hash: &[u8; 32]) {

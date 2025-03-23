@@ -63,14 +63,18 @@ impl WalletStore {
     }
 
     /// Get or create an existing wallet store
-    pub fn init_wallet_store() -> WalletStore {
+    pub fn init_wallet_store() -> Result<WalletStore, String> {
         if Path::new(WALLET_PATH).exists() {
-            Self::load_from_file()
-                .expect("[WalletStore::load_from_file] ERROR: Could not load wallet file")
+            Self::load_from_file().map_err(|e| {
+                format!(
+                    "[WalletStore::load_from_file] ERROR: Could not load wallet file: {}",
+                    e
+                )
+            })
         } else {
-            WalletStore {
+            Ok(WalletStore {
                 wallets: HashMap::new(),
-            }
+            })
         }
     }
 
@@ -85,12 +89,26 @@ impl WalletStore {
         Ok(wallets)
     }
 
-    pub fn add_wallet(&mut self) -> Address {
+    pub fn add_wallet(&mut self) -> Result<Address, String> {
         let new_wallet = Wallet::new();
         let address = new_wallet.get_wallet_address();
         self.wallets.insert(address.get_full_address(), new_wallet);
-        self.save_to_file()
-            .expect("[wallet::add_wallet] ERROR: Failed to save new wallet");
-        address
+        self.save_to_file().map_err(|e| {
+            format!(
+                "[wallet::add_wallet] ERROR: Failed to save new wallet: {}",
+                e
+            )
+        })?;
+
+        Ok(address)
+    }
+
+    pub fn get_local_wallet(&self, addr: &Address) -> Result<&Wallet, String> {
+        self.wallets.get(&addr.get_full_address()).ok_or_else(|| {
+            format!(
+                "[wallet::get_local_wallet] ERROR: Wallet not found for address: {}",
+                addr.get_full_address()
+            )
+        })
     }
 }

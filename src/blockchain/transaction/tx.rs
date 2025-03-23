@@ -3,7 +3,7 @@ use secp256k1::rand::RngCore;
 use secp256k1::{rand, Message, PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::fmt::Debug;
+use std::{error::Error, fmt::Debug};
 
 use crate::cli::db::get_utxo;
 use crate::wallets::address::{hash_pub_key, Address};
@@ -23,14 +23,15 @@ pub struct Tx {
 
 impl Tx {
     /// Returns the sha256 hash of the transaction, to be used as the tx ID
-    pub fn hash(&self) -> [u8; 32] {
+    pub fn hash(&self) -> Result<[u8; 32], Box<dyn Error>> {
         let mut tx_copy = self.clone();
         tx_copy.id = [0u8; 32]; // Id field should be empty, since we set the tx id field with the resolved hash
 
-        let serialized = bincode::serialize(&tx_copy).expect("Serialization failed");
+        let serialized =
+            bincode::serialize(&tx_copy).map_err(|e| format!("Serialization failed, {:?}", e))?;
         let hash = Sha256::digest(&serialized);
 
-        hash.into() // Convert to [u8; 32]
+        Ok(hash.into()) // Convert to [u8; 32]
     }
 
     /// Returns a copy of the given Tx without input pub keys and signatures.
@@ -69,9 +70,9 @@ impl Tx {
     }
 
     /// Sign a tx with a given private key
-    pub fn sign(&mut self, priv_key: &SecretKey) {
+    pub fn sign(&mut self, priv_key: &SecretKey) -> Result<(), Box<dyn Error>> {
         if self.is_coinbase() {
-            return; // Coinbase txs don't need to be signed
+            return Ok(()); // Coinbase txs don't need to be signed
         }
         let secp = Secp256k1::new();
         let tx_copy_base = self.trimmed_copy();
@@ -82,21 +83,23 @@ impl Tx {
             let mut tx_copy: Tx = tx_copy_base.trimmed_copy();
 
             // Set the ID to the hash of the tx. When we verify, this will be used for pubkey comparison
-            tx_copy.id = tx_copy.hash();
+            tx_copy.id = tx_copy.hash()?;
             let msg = Message::from_digest(tx_copy.id);
             let sig = secp.sign_ecdsa(&msg, priv_key);
 
             // Set the sig of the original input
             input.signature = Signature::from_compact(&sig.serialize_compact())
-                .expect("[Tx::sign] ERROR: Failed to serialize signature");
+                .map_err(|e| format!("[Tx::sign] ERROR: Failed to serialize signature {:?}", e))?;
             // Note we assume here that the public key has already been added to the tx
         }
+
+        Ok(())
     }
 
-    pub fn verify(&self) -> bool {
+    pub fn verify(&self) -> Result<bool, Box<dyn Error>> {
         // Coinbase txs do not need standard verification
         if self.is_coinbase() {
-            return true;
+            return Ok(true);
         }
 
         for input in &self.inputs {
@@ -110,12 +113,12 @@ impl Tx {
             // Check if the computed pub key hash matches the expected one
             if computed_pub_key_hash != prev_tx_out.pub_key_hash {
                 println!("[Tx::verify] ERROR: PubKey does not match PubKeyHash!");
-                return false;
+                return Ok(false);
             }
 
             // Recompute the tx id from the trimmed copy. If the id differs from
             // the signed tx id, the signature verification will fail
-            tx_copy.id = tx_copy.hash();
+            tx_copy.id = tx_copy.hash()?;
 
             // Verify the signature was created by signing the tx is with the given pub key
             let msg = Message::from_digest(tx_copy.id);
@@ -123,14 +126,18 @@ impl Tx {
                 .verify_ecdsa(&msg, &input.signature, &input.pub_key)
                 .is_err()
             {
-                return false;
+                return Ok(false);
             }
         }
-        true
+        Ok(true)
     }
 
     /// Create a new tx
-    pub fn new(from_wallet: &Wallet, to_address: &Address, value: u32) -> Tx {
+    pub fn new(
+        from_wallet: &Wallet,
+        to_address: &Address,
+        value: u32,
+    ) -> Result<Tx, Box<dyn Error>> {
         let mut inputs: Vec<TxInput> = Vec::new();
         let mut outputs: Vec<TxOutput> = Vec::new();
         let from_address = from_wallet.get_wallet_address();
@@ -176,10 +183,10 @@ impl Tx {
             inputs,
             outputs,
         };
-        new_tx.id = new_tx.hash();
-        new_tx.sign(from_wallet.private_key());
+        new_tx.id = new_tx.hash()?;
+        new_tx.sign(from_wallet.private_key())?;
 
-        new_tx
+        Ok(new_tx)
     }
 }
 
@@ -207,7 +214,7 @@ pub struct TxInput {
 }
 
 /// Create the coinbase tx
-pub fn coinbase_tx(reward_addr: &Address) -> Tx {
+pub fn coinbase_tx(reward_addr: &Address) -> Result<Tx, Box<dyn Error>> {
     // Coinbase txs will contain an arbitrary in, since there is no previous out
     let mut rand_data = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut rand_data);
@@ -239,8 +246,8 @@ pub fn coinbase_tx(reward_addr: &Address) -> Tx {
         outputs: tx_out,
     };
     // Note that the coinbase tx hash is irrelevant, since we don't verify the coinbase tx.
-    tx.id = tx.hash();
-    tx
+    tx.id = tx.hash()?;
+    Ok(tx)
 }
 
 // TODO: Factor these out in future with options

@@ -3,7 +3,7 @@ use base58::ToBase58;
 use ripemd::Ripemd160;
 use secp256k1::PublicKey;
 use sha2::{Digest, Sha256};
-use std::fmt::Write;
+use std::{error::Error, fmt::Write};
 
 const VERSION: u8 = 0;
 
@@ -17,38 +17,37 @@ pub struct Address {
 impl Address {
     /// Create a new Address instance. Provided address must be a string slice of a base58 encoded 25 byte address.
     /// Bytes should take the format: `[[0 version], [1-21 pub key hash], [21-24 checksum]]`
-    pub fn new_from_str(addr: &str) -> Self {
-        let decoded_addr = addr
-            .from_base58()
-            .expect("[Address::new_from_str] ERROR: Invalid Base58 address");
+    pub fn new_from_str(addr: &str) -> Result<Self, Box<dyn Error>> {
+        let decoded_addr = addr.from_base58().map_err(|e| {
+            format!(
+                "[Address::new_from_str] ERROR: Failed to decode address: {:?}",
+                e
+            )
+        })?;
 
         if decoded_addr.len() != 25 {
-            panic!("[Address::new_from_str] ERROR: Invalid address length")
+            return Err("[Address::new_from_str] ERROR: Invalid address length".into());
         }
 
         // Extract version byte (first byte)
         let version = decoded_addr[0];
 
         // Extract public key hash (next 20 bytes)
-        let pub_key_hash: [u8; 20] = decoded_addr[1..21]
-            .try_into()
-            .expect("[Address::new_from_str] ERROR: Invalid pub key hash"); // The public key hash is 20 bytes
+        let pub_key_hash: [u8; 20] = decoded_addr[1..21].try_into()?; // The public key hash is 20 bytes
 
         // Extract checksum (last 4 bytes)
-        let checksum: [u8; 4] = decoded_addr[decoded_addr.len() - 4..]
-            .try_into()
-            .expect("[Address::new_from_str] ERROR: Invalid checksum");
+        let checksum: [u8; 4] = decoded_addr[decoded_addr.len() - 4..].try_into()?;
 
         let target_checksum = Address::calculate_checksum(version, &pub_key_hash);
         if target_checksum != checksum {
-            panic!("[Address::new_from_str] ERROR: Checksum is invalid")
+            return Err("[Address::new_from_str] ERROR: Checksum is invalid".into());
         }
 
-        Address {
+        Ok(Address {
             pub_key_hash,
             version,
             checksum,
-        }
+        })
     }
 
     pub fn new_from_key(pub_key: PublicKey) -> Self {
