@@ -7,7 +7,7 @@ use crate::{
         },
     },
     networking::p2p::network::P2PMessage,
-    wallets::address::Address,
+    wallets::address::{bytes_to_hex_string, Address},
 };
 
 use axum::{
@@ -74,6 +74,31 @@ pub async fn handle_get_wallet_balance(
     Ok(Json(json!({
         "address": addr,
         "balance": balance
+    })))
+}
+
+pub async fn handle_get_utxos_for_addr(
+    Path(addr): Path<String>,
+) -> Result<Json<serde_json::Value>, ErrorResponse> {
+    let wallet_addr: Address = match Address::new_from_str(&addr) {
+        Ok(addr) => addr,
+        Err(e) => {
+            return Err(ErrorResponse {
+                code: StatusCode::BAD_REQUEST.as_u16(),
+                error: e.to_string(),
+            })
+        }
+    };
+    let utxos = find_utxos(wallet_addr.pub_key_hash());
+
+    Ok(Json(json!({
+        "address": addr,
+        "utxos": utxos.iter().map(|utxo| {
+            json!({
+                "value": utxo.value,
+                "pub_key_hash": bytes_to_hex_string(&utxo.pub_key_hash),
+            })
+        }).collect::<Vec<_>>() // Collect into Vec<serde_json::Value>
     })))
 }
 
