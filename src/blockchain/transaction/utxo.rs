@@ -11,16 +11,17 @@ use super::{mempool::is_output_spent_in_mempool, tx::TxOutput};
 
 pub type UTXOSet = HashMap<([u8; 32], u32), TxOutput>;
 
-/// Searches through all db entries with the UTXO prefix for utxos with outputs matching the given pub key hash
-pub fn find_utxos(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
-    // Need to add mempool checks******************************************
+/// Searches through all db entries with the UTXO prefix for utxos with outputs matching the given pub key hash.
+///
+/// Note that returned utxos *may be in a pending tx within the mempool
+pub fn find_utxos_for_addr(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
     let mut utxos: Vec<TxOutput> = Vec::new();
     let iter = ROCKS_DB.iterator_cf(utxo_cf(), IteratorMode::Start);
 
     for res in iter {
         match res {
             Err(_) => {
-                panic!("[utxo::find_utxos] ERROR: Failed to iterate through db")
+                panic!("[utxo::find_utxos_for_addr] ERROR: Failed to iterate through db")
             }
             Ok((_, val)) => {
                 let tx_out: TxOutput = bincode::deserialize(&val).unwrap();
@@ -34,7 +35,9 @@ pub fn find_utxos(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
 }
 
 /// Creates a hashmap of transaction ids to spendable utxo indexes by searching the db for utxos with spendable
-/// outputs that add to the target amount
+/// outputs that add to the target amount.
+///
+/// Spendable utxos must not be present in the mempool.
 pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSet) {
     let mut utxo_map: UTXOSet = HashMap::new();
     let mut accumulated: u32 = 0;
@@ -43,7 +46,7 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSe
     for res in iter {
         match res {
             Err(_) => {
-                panic!("[utxo::find_utxos] ERROR: Failed to iterate through db")
+                panic!("[utxo::find_spendable_utxos] ERROR: Failed to iterate through db")
             }
             Ok((key, val)) => {
                 let tx_out: TxOutput = bincode::deserialize(&val).unwrap();

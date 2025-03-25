@@ -6,7 +6,7 @@ use crate::{
         chain::{clear_blockchain, create_blockchain, get_blockchain_json},
         transaction::{
             tx::Tx,
-            utxo::{find_utxos, reindex_utxos, update_utxos},
+            utxo::{find_utxos_for_addr, reindex_utxos, update_utxos},
         },
     },
     cli::db,
@@ -90,10 +90,11 @@ pub fn handle_print_blockchain(show_txs: bool) {
 }
 
 pub fn handle_get_balance(req_addr: &String) {
+    // TODO: Refactor to be an API call
     let address = Address::new_from_str(req_addr).unwrap();
     reindex_utxos().unwrap();
 
-    let utxos = find_utxos(address.pub_key_hash());
+    let utxos = find_utxos_for_addr(address.pub_key_hash());
 
     let mut balance = 0;
 

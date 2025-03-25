@@ -3,7 +3,7 @@ use crate::{
         chain::get_blockchain_json,
         transaction::{
             tx::Tx,
-            utxo::{find_utxos, reindex_utxos},
+            utxo::{find_utxos_for_addr, reindex_utxos},
         },
     },
     networking::p2p::network::P2PMessage,
@@ -63,7 +63,7 @@ pub async fn handle_get_wallet_balance(
         error: e.to_string(),
     })?;
 
-    let utxos = find_utxos(wallet_addr.pub_key_hash());
+    let utxos = find_utxos_for_addr(wallet_addr.pub_key_hash());
 
     let mut balance = 0;
 
@@ -89,7 +89,7 @@ pub async fn handle_get_utxos_for_addr(
             })
         }
     };
-    let utxos = find_utxos(wallet_addr.pub_key_hash());
+    let utxos = find_utxos_for_addr(wallet_addr.pub_key_hash());
 
     Ok(Json(json!({
         "address": addr,
