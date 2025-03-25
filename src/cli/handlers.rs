@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 use crate::{
     blockchain::{
         block::Block,
-        chain::{clear_blockchain, create_blockchain, get_last_block},
+        chain::{clear_blockchain, create_blockchain, get_blockchain_json},
         transaction::{
             tx::Tx,
             utxo::{find_utxos, reindex_utxos, update_utxos},
@@ -12,12 +12,10 @@ use crate::{
     cli::db,
     networking::{node::Node, p2p::network::start_p2p_network, server::rest_api::start_rest_api},
     wallets::{
-        address::{bytes_to_hex_string, Address},
+        address::Address,
         wallet::{Wallet, WalletStore},
     },
 };
-
-use super::db::get_block;
 
 pub fn handle_get_node_id() {
     let node = Node::get_or_create_peer_id();
@@ -83,57 +81,12 @@ pub fn handle_clear_blockchain() {
     println!("Blockchain data removed successfully")
 }
 
-pub fn handle_print_blockchain(show_txs: &bool) {
-    let mut current_block = get_last_block().unwrap();
-
-    loop {
-        println!("====================================");
-        println!("Block Height: {}", current_block.height);
-        println!(
-            "Block Hash: {:x?}",
-            bytes_to_hex_string(&current_block.hash)
-        );
-        println!(
-            "Previous Hash: {:x?}",
-            bytes_to_hex_string(&current_block.prev_hash)
-        );
-        println!("Timestamp: {}", current_block.timestamp);
-        println!("Nonce: {}", current_block.nonce);
-        println!("------------------------------------");
-
-        if *show_txs {
-            println!("Transactions:");
-            for tx in &current_block.txs {
-                println!("  Tx ID: {:x?}", bytes_to_hex_string(&tx.id));
-                for input in &tx.inputs {
-                    println!(
-                        "    Input: Prev Tx ID: {:x?}, Output Index: {}",
-                        bytes_to_hex_string(&input.prev_tx_id),
-                        input.out
-                    );
-                }
-                for output in &tx.outputs {
-                    println!(
-                        "    Output: Value: {}, Recipient Hash: {:x?}",
-                        output.value,
-                        bytes_to_hex_string(&output.pub_key_hash)
-                    );
-                }
-            }
-        }
-
-        println!("====================================");
-
-        // Break if we have reached the genesis block
-        if current_block.is_genesis() {
-            break;
-        }
-
-        // Get the previous block
-        current_block = get_block(&current_block.prev_hash)
-            .unwrap()
-            .expect("[handlers::handle_print_blockchain] ERROR: Failed to fetch previous block");
-    }
+pub fn handle_print_blockchain(show_txs: bool) {
+    let printable_chain = get_blockchain_json(show_txs).unwrap();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&printable_chain).unwrap()
+    );
 }
 
 pub fn handle_get_balance(req_addr: &String) {

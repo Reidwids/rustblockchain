@@ -27,7 +27,7 @@ fn create_router(tx: Sender<P2PMessage>) -> Router {
     Router::new()
         .route("/", get(handle_root))
         .route("/health", get(handle_health_check))
-        .route("/wallet/balance/:addr", get(handle_get_wallet_balance))
+        .route("/wallet/balance/{addr}", get(handle_get_wallet_balance))
         .route("/chain", get(handle_get_chain))
         .route("/tx/send", post(handle_send_transaction))
         .with_state(tx)

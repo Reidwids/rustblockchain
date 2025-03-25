@@ -50,7 +50,7 @@ enum Commands {
     #[command(about = "Prints the existing blockchain")]
     PrintBlockchain {
         #[arg(short = 't')]
-        txs: bool,
+        show_txs: bool,
     },
 
     /// Get balance of a given address
@@ -92,7 +92,7 @@ impl Cli {
             Commands::GetWallets => handle_get_wallets(),
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),
             Commands::ClearBlockchain => handle_clear_blockchain(),
-            Commands::PrintBlockchain { txs } => handle_print_blockchain(txs),
+            Commands::PrintBlockchain { show_txs } => handle_print_blockchain(*show_txs),
             Commands::GetBalance { address } => handle_get_balance(address),
             Commands::SendTx {
                 to,
