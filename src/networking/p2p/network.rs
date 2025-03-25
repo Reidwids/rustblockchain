@@ -1,8 +1,4 @@
-use crate::{
-    blockchain::{block::Block, transaction::tx::Tx},
-    cli::db,
-    networking::node::Node,
-};
+use crate::{cli::db, networking::node::Node};
 use libp2p::{
     futures::StreamExt,
     kad::{store::MemoryStore, Behaviour, Event},
@@ -10,13 +6,24 @@ use libp2p::{
     swarm::SwarmEvent,
     tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
 };
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, time::Duration};
 use tokio::sync::mpsc;
 
 pub enum P2PMessage {
     HealthCheck(),
-    BroadcastTx(Tx),
-    BroadcastBlock(Block),
+    BroadcastInv(Inventory),
+}
+
+pub enum P2PMethods {
+    GetData(Inventory),
+    SendData(Inventory),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Inventory {
+    Transaction([u8; 32]), // Holds a transaction ID
+    Block([u8; 32]),       // Holds a block hash
 }
 
 pub type PeerCollection = HashMap<PeerId, Vec<Multiaddr>>;
@@ -48,6 +55,20 @@ pub async fn start_p2p_network(
                         println!("Connection established with {peer_id} at {:?}", endpoint);
                         db::put_peer(peer_id, endpoint.get_remote_address().clone());
                     }
+                    SwarmEvent::Behaviour(Event { peer, message }) => {
+                        match message {
+                            P2PMethods::GetData(inv) => {
+                                println!("Received getdata request from {:?}", peer);
+                                // handle_getdata_request(peer, inv_list).await;
+                            }
+                            P2PMethods::SendData(inv) => {
+                                println!("Received senddata request from {:?}", peer);
+                                // handle_senddata_request(peer, inv_list).await;
+                            }
+                            _ => {}
+                        }
+                    }
+
                     _ => {}
                 }
             }
@@ -56,15 +77,37 @@ pub async fn start_p2p_network(
                     P2PMessage::HealthCheck() => {
                         println!("P2P Channel received msg");
                     }
-                    P2PMessage::BroadcastTx(tx) => {
-                        println!("Broadcasting transaction: {}", hex::encode(&tx.id));
-                    }
-                    P2PMessage::BroadcastBlock(block) => {
-                        println!("Broadcasting block: {}", hex::encode(&block.hash));
+                    P2PMessage::BroadcastInv(inv) => {
+                        let peers = db::get_peers();
+                        for (peer, _) in peers.iter() {
+                            send_inv(swarm, *peer, inv).await;
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+async fn send_inv(swarm: Swarm<Behaviour<MemoryStore>>, peer: PeerId, message: Inventory) {
+    let serialized_message = match serde_json::to_vec(&message) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!(
+                "[p2p::send_message] ERROR: Failed to serialize message: {:?}",
+                e
+            );
+            return;
+        }
+    };
+
+    if let Err(e) = swarm.behaviour_mut().send_message(peer, serialized_message) {
+        eprintln!(
+            "[p2p::send_message] ERROR: Failed to send message to peer {}: {:?}",
+            peer, e
+        );
+    } else {
+        println!("[p2p::send_message] Sent message to peer: {:?}", peer);
     }
 }
 
