@@ -6,7 +6,7 @@ use crate::{
             utxo::{find_utxos_for_addr, reindex_utxos},
         },
     },
-    networking::p2p::network::P2PMessage,
+    networking::p2p::network::{Inventory, P2PMessage},
     wallets::address::Address,
 };
 
@@ -147,7 +147,7 @@ pub async fn handle_send_tx(
     })?;
 
     let _ = p2p
-        .send(P2PMessage::BroadcastTx(tx))
+        .send(P2PMessage::BroadcastInv(Inventory::Transaction(tx.id)))
         .await
         .map_err(|e| ErrorResponse {
             code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),

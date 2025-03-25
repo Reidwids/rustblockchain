@@ -4,15 +4,12 @@ use libp2p::PeerId;
 use once_cell::sync::Lazy;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, DB};
 
-use crate::{
-    blockchain::{
-        block::Block,
-        transaction::{
-            mempool::Mempool,
-            tx::{Tx, TxOutput},
-        },
+use crate::blockchain::{
+    block::Block,
+    transaction::{
+        mempool::Mempool,
+        tx::{Tx, TxOutput},
     },
-    networking::p2p::network::PeerCollection,
 };
 
 pub const LAST_HASH_KEY: &str = "lh";

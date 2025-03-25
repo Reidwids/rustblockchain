@@ -14,20 +14,7 @@ serde = { version = "1.0.217", features = ["derive"] }
 sha2 = "0.10.8"
 clap = { version = "4.5", features = ["derive"] }
 once_cell = "1.20.3"
-libp2p = { version = "0.55.0", features = [
-  "mdns",      # Local peer discovery
-  "noise",     # Secure communication
-  "tcp",       # Transport over TCP
-  "yamux",     # Multiplexing
-  "dns",       # DNS resolution
-  "identify",  # Peer identification
-  "gossipsub", # Pub-Sub messaging
-  "ping",      # Peer-to-peer health check
-  "kad",       # Kademlia DHT for peer discovery
-  "tokio",
-  "macros",
-  "serde",
-] }
+libp2p = { version = "0.54.0", features = ["full"] }
 
 tokio = { version = "1.44.0", features = ["full"] }
 axum = "0.8.1"

@@ -3,7 +3,7 @@ use base58::ToBase58;
 use ripemd::Ripemd160;
 use secp256k1::PublicKey;
 use sha2::{Digest, Sha256};
-use std::{error::Error, fmt::Write};
+use std::error::Error;
 
 const VERSION: u8 = 0;
 

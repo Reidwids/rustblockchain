@@ -1,53 +1,74 @@
-use crate::{cli::db, networking::node::Node};
 use libp2p::{
     futures::StreamExt,
-    kad::{store::MemoryStore, Behaviour, Event},
+    gossipsub::{self, IdentTopic},
+    identity::Keypair,
     noise,
-    swarm::SwarmEvent,
-    tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, yamux, Multiaddr, SwarmBuilder,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::error::Error;
 use tokio::sync::mpsc;
 
-pub enum P2PMessage {
-    HealthCheck(),
-    BroadcastInv(Inventory),
-}
+use crate::cli::db;
 
-pub enum P2PMethods {
-    GetData(Inventory),
-    SendData(Inventory),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+// Inventory enum matching your existing type
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum Inventory {
-    Transaction([u8; 32]), // Holds a transaction ID
-    Block([u8; 32]),       // Holds a block hash
+    Transaction([u8; 32]),
+    Block([u8; 32]),
 }
 
-pub type PeerCollection = HashMap<PeerId, Vec<Multiaddr>>;
+pub enum P2PMessage {
+    BroadcastInv(Inventory),
+    HealthCheck(),
+}
 
 pub async fn start_p2p_network(
+    local_key: Keypair,
     mut rx: mpsc::Receiver<P2PMessage>,
-    port: Option<u16>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let mut swarm = setup_swarm(port);
+    // let port = port.unwrap_or(4001);
+    let port = 4001;
+    let p2p_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
+    // Build swarm with blockchain behaviour
+    let mut swarm = SwarmBuilder::with_existing_identity(local_key.clone())
+        .with_tokio()
+        .with_tcp(
+            tcp::Config::default(),
+            noise::Config::new,
+            yamux::Config::default,
+        )
+        .unwrap()
+        .with_behaviour(|key| BlockchainBehaviour::create(key))
+        .unwrap()
+        .build();
+
+    // Listen on a specific port
+    swarm.listen_on(p2p_addr.clone()).unwrap();
+
+    // Load and connect to bootstrap nodes
+    let bootstrap_nodes = get_seed_nodes();
+    for node in bootstrap_nodes {
+        let _ = swarm.dial(node);
+    }
+
     loop {
         tokio::select! {
-                event = swarm.select_next_some() => {
-                    match event {
-
-                    SwarmEvent::NewListenAddr { address, .. } => {
-                        println!("P2P network listening on {address:?}");
-                    }
-                    SwarmEvent::Behaviour(Event::RoutingUpdated {
-                        peer, addresses, ..
-                    }) => {
-                        for addr in addresses.iter() {
-                            db::put_peer(peer.clone(), addr.clone());
+            // Handle network events
+            event = swarm.select_next_some() => {
+                match event {
+                    SwarmEvent::Behaviour(BlockchainBehaviourEvent::Gossipsub(
+                        gossipsub::Event::Message { message, .. }
+                    )) => {
+                        // Attempt to deserialize received message
+                        if let Ok(inv) = serde_json::from_slice::<Inventory>(&message.data) {
+                            // Handle the received inventory
+                            swarm.behaviour_mut().handle_inventory_message(inv);
                         }
-                        println!("Connected to peer: {:?}", peer);
+                    }
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {}", address);
                     }
                     SwarmEvent::ConnectionEstablished {
                         peer_id, endpoint, ..
@@ -55,33 +76,21 @@ pub async fn start_p2p_network(
                         println!("Connection established with {peer_id} at {:?}", endpoint);
                         db::put_peer(peer_id, endpoint.get_remote_address().clone());
                     }
-                    SwarmEvent::Behaviour(Event { peer, message }) => {
-                        match message {
-                            P2PMethods::GetData(inv) => {
-                                println!("Received getdata request from {:?}", peer);
-                                // handle_getdata_request(peer, inv_list).await;
-                            }
-                            P2PMethods::SendData(inv) => {
-                                println!("Received senddata request from {:?}", peer);
-                                // handle_senddata_request(peer, inv_list).await;
-                            }
-                            _ => {}
-                        }
-                    }
-
                     _ => {}
                 }
             }
+
+            // Handle local broadcast requests
             Some(message) = rx.recv() => {
                 match message {
-                    P2PMessage::HealthCheck() => {
-                        println!("P2P Channel received msg");
-                    }
                     P2PMessage::BroadcastInv(inv) => {
-                        let peers = db::get_peers();
-                        for (peer, _) in peers.iter() {
-                            send_inv(swarm, *peer, inv).await;
+                        // Publish inventory to gossipsub topic
+                        if let Err(e) = swarm.behaviour_mut().publish_inventory(&inv) {
+                            eprintln!("Failed to broadcast inventory: {}", e);
                         }
+                    }
+                    P2PMessage::HealthCheck() => {
+                        println!("P2P Channel received msg")
                     }
                 }
             }
@@ -89,75 +98,107 @@ pub async fn start_p2p_network(
     }
 }
 
-async fn send_inv(swarm: Swarm<Behaviour<MemoryStore>>, peer: PeerId, message: Inventory) {
-    let serialized_message = match serde_json::to_vec(&message) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!(
-                "[p2p::send_message] ERROR: Failed to serialize message: {:?}",
-                e
-            );
-            return;
-        }
-    };
-
-    if let Err(e) = swarm.behaviour_mut().send_message(peer, serialized_message) {
-        eprintln!(
-            "[p2p::send_message] ERROR: Failed to send message to peer {}: {:?}",
-            peer, e
-        );
-    } else {
-        println!("[p2p::send_message] Sent message to peer: {:?}", peer);
-    }
+// Custom network behavior with composition
+#[derive(NetworkBehaviour)]
+pub struct BlockchainBehaviour {
+    pub gossipsub: gossipsub::Behaviour,
 }
 
-fn setup_swarm(port: Option<u16>) -> Swarm<Behaviour<MemoryStore>> {
-    // Create a unique identifier for the node
-    let node = Node::get_or_create_peer_id();
-    println!("Local peer ID: {:?}", node.get_peer_id());
-    let port = port.unwrap_or(4001);
-    let p2p_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
+impl BlockchainBehaviour {
+    pub fn create(local_key: &Keypair) -> Self {
+        // Configure gossipsub
+        let gossipsub_config = gossipsub::ConfigBuilder::default()
+            .max_transmit_size(10 * 1024 * 1024) // 10MB max message size
+            .validation_mode(gossipsub::ValidationMode::Strict)
+            .build()
+            .expect("Valid gossipsub config");
 
-    let store = MemoryStore::new(node.get_peer_id().clone());
-    // Define network behavior - init kademlia for peer discovery over the web
-    let mut kad_behaviour = Behaviour::new(node.get_peer_id().clone(), store);
+        let mut behaviour = gossipsub::Behaviour::new(
+            gossipsub::MessageAuthenticity::Signed(local_key.clone()),
+            gossipsub_config,
+        )
+        .expect("Valid gossipsub behaviour");
 
-    // Persist discovered peers in RocksDB for reconnection on restart
-    let peer_addresses = db::get_peers();
-    for (peer_id, addresses) in peer_addresses {
-        for addr in addresses {
-            if addr != p2p_addr {
-                kad_behaviour.add_address(&peer_id, addr);
+        // Create and subscribe to blockchain inventory topic
+        let blockchain_topic = IdentTopic::new("blockchain_inventory");
+        behaviour
+            .subscribe(&blockchain_topic)
+            .expect("Can subscribe to topic");
+
+        Self {
+            gossipsub: behaviour,
+        }
+    }
+
+    // Method to publish inventory
+    pub fn publish_inventory(&mut self, inv: &Inventory) -> Result<(), Box<dyn std::error::Error>> {
+        let topic = IdentTopic::new("blockchain_inventory");
+
+        // Serialize inventory
+        let serialized_inv = serde_json::to_vec(inv)?;
+
+        // Publish to topic
+        self.gossipsub.publish(topic, serialized_inv)?;
+
+        Ok(())
+    }
+
+    // Handle received inventory message
+    pub fn handle_inventory_message(&mut self, inv: Inventory) -> bool {
+        // Check if this inventory item is new
+        // Process the new inventory item
+        match inv {
+            Inventory::Transaction(tx_hash) => {
+                // Example: Check if transaction exists in mempool/database
+                if !self.transaction_exists(&tx_hash) {
+                    println!("New transaction inventory received: {:?}", tx_hash);
+
+                    // TODO: check if tx exists already
+
+                    // Trigger transaction retrieval
+                    self.request_transaction_data(tx_hash);
+
+                    return true;
+                }
+            }
+            Inventory::Block(block_hash) => {
+                // Similar logic for blocks
+                if !self.block_exists(&block_hash) {
+                    println!("New block inventory received: {:?}", block_hash);
+
+                    // TODO: check if tx exists already
+
+                    // Trigger block retrieval
+                    self.request_block_data(block_hash);
+
+                    return true;
+                }
             }
         }
+        false
     }
 
-    let mut swarm = SwarmBuilder::with_existing_identity(node.get_priv_key().clone())
-        .with_tokio()
-        .with_tcp(
-            tcp::Config::default(), // Configures tcp as the chosen transport layer
-            noise::Config::new, // Adds the noise protocol, which adds encryption to tcp connections
-            yamux::Config::default, // Multiplexing, allowing simultaneous data streams over a single connection
-        )
-        .unwrap()
-        .with_behaviour(|_| kad_behaviour)
-        .unwrap()
-        // Extend idle connection time, since nodes may need long connections to propogate txs, sync blocks, etc.
-        .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(u64::MAX)))
-        .build();
-
-    // Start listening for connections
-    swarm.listen_on(p2p_addr.clone()).unwrap();
-
-    // Dial known seed nodes for initial connectivity
-    for seed in get_seed_nodes() {
-        match swarm.dial(seed.clone()) {
-            Ok(()) => println!("Attempting to connect to seed node at {seed}"),
-            Err(e) => eprintln!("Failed to dial seed node at {seed}: {e}"),
-        }
+    // Mock methods - replace with actual database/mempool checks
+    fn transaction_exists(&self, tx_hash: &[u8; 32]) -> bool {
+        // Placeholder - replace with actual implementation
+        false
     }
 
-    swarm
+    fn block_exists(&self, block_hash: &[u8; 32]) -> bool {
+        // Placeholder - replace with actual implementation
+        false
+    }
+
+    // Mock methods for data retrieval
+    fn request_transaction_data(&self, tx_hash: [u8; 32]) {
+        // Trigger transaction data retrieval
+        println!("Requesting transaction data for {:?}", tx_hash);
+    }
+
+    fn request_block_data(&self, block_hash: [u8; 32]) {
+        // Trigger block data retrieval
+        println!("Requesting block data for {:?}", block_hash);
+    }
 }
 
 // Once deployed, introduce seed nodes
