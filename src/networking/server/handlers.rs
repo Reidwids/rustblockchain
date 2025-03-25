@@ -44,19 +44,6 @@ pub async fn handle_health_check(
     })))
 }
 
-pub async fn handle_send_transaction(
-    tx: State<Sender<P2PMessage>>,
-    Json(payload): Json<Tx>,
-) -> Result<Json<serde_json::Value>, StatusCode> {
-    tx.send(P2PMessage::BroadcastTransaction(payload))
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(Json(json!({
-        "msg": "Tx broadcasted successfully",
-    })))
-}
-
 pub async fn handle_get_wallet_balance(
     Path(addr): Path<String>,
 ) -> Result<Json<serde_json::Value>, ErrorResponse> {
@@ -70,6 +57,7 @@ pub async fn handle_get_wallet_balance(
         }
     };
 
+    // TODO: remove reindexing - shouldn't be required for running nodes
     reindex_utxos().map_err(|e| ErrorResponse {
         code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
         error: e.to_string(),
@@ -103,6 +91,30 @@ pub async fn handle_get_chain(
             error: e.to_string(),
         }),
     }
+}
+
+pub async fn handle_send_tx(
+    p2p: State<Sender<P2PMessage>>,
+    Json(payload): Json<Tx>,
+) -> Result<Json<serde_json::Value>, ErrorResponse> {
+    let _ = p2p
+        .send(P2PMessage::BroadcastTx(payload))
+        .await
+        .map_err(|e| ErrorResponse {
+            code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+            error: e.to_string(),
+        })?;
+
+    // Tx must be signed before receiving over http.
+    // Therefore, we must think about how a client could sign with
+    // the same structure as we expect. The easiest way to go about
+    // this is likely to create a little WASM binary that can take in
+    // a tx request and pass back tx_bytes to send to this handler.
+    // Then we can simply run our usual verification + persistence to p2p
+
+    Ok(Json(json!({
+        "msg": "Tx broadcasted successfully",
+    })))
 }
 
 #[derive(Serialize)]

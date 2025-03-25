@@ -63,20 +63,20 @@ pub struct BlockJson {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TxJson {
+struct TxJson {
     id: String,
     inputs: Vec<TxInputJson>,
     outputs: Vec<TxOutputJson>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TxInputJson {
+struct TxInputJson {
     prev_tx_id: String,
     out: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TxOutputJson {
+struct TxOutputJson {
     value: u32,
     pub_key_hash: String,
 }

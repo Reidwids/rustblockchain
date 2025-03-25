@@ -16,7 +16,7 @@ use tokio::sync::mpsc;
 
 pub enum P2PMessage {
     HealthCheck(),
-    BroadcastTransaction(Tx), // TODO: Refactor types
+    BroadcastTx(Tx),
     BroadcastBlock(Block),
 }
 
@@ -57,7 +57,7 @@ pub async fn start_p2p_network(
                     P2PMessage::HealthCheck() => {
                         println!("P2P Channel received msg");
                     }
-                    P2PMessage::BroadcastTransaction(tx) => {
+                    P2PMessage::BroadcastTx(tx) => {
                         println!("Broadcasting transaction: {}", bytes_to_hex_string(&tx.id));
                     }
                     P2PMessage::BroadcastBlock(block) => {
