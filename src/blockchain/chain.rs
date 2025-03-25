@@ -2,13 +2,13 @@ use rocksdb::IteratorMode;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
+use super::block::Block;
 use crate::{
     cli::db::{self, blockchain_exists, get_block, get_last_hash, ROCKS_DB},
     networking::node::NODE_KEY,
-    wallets::address::{bytes_to_hex_string, Address},
+    wallets::address::Address,
 };
-
-use super::block::Block;
+use hex;
 
 /// Initializes the blockchain, and fails if a blockchain already exists
 pub fn create_blockchain(addr: &Address) -> Result<(), Box<dyn Error>> {
@@ -88,8 +88,8 @@ pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn 
     loop {
         let block_json = BlockJson {
             height: current_block.height,
-            hash: bytes_to_hex_string(&current_block.hash),
-            prev_hash: bytes_to_hex_string(&current_block.prev_hash),
+            hash: hex::encode(&current_block.hash),
+            prev_hash: hex::encode(&current_block.prev_hash),
             timestamp: current_block.timestamp,
             nonce: current_block.nonce,
             txs: if include_txs {
@@ -98,12 +98,12 @@ pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn 
                         .txs
                         .iter()
                         .map(|tx| TxJson {
-                            id: bytes_to_hex_string(&tx.id),
+                            id: hex::encode(&tx.id),
                             inputs: tx
                                 .inputs
                                 .iter()
                                 .map(|input| TxInputJson {
-                                    prev_tx_id: bytes_to_hex_string(&input.prev_tx_id),
+                                    prev_tx_id: hex::encode(&input.prev_tx_id),
                                     out: input.out,
                                 })
                                 .collect(),
@@ -112,7 +112,7 @@ pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn 
                                 .iter()
                                 .map(|output| TxOutputJson {
                                     value: output.value,
-                                    pub_key_hash: bytes_to_hex_string(&output.pub_key_hash),
+                                    pub_key_hash: hex::encode(&output.pub_key_hash),
                                 })
                                 .collect(),
                         })

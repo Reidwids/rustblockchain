@@ -5,6 +5,7 @@ use crate::{
         block::Block,
         chain::{clear_blockchain, create_blockchain, get_blockchain_json},
         transaction::{
+            mempool::add_tx_to_mempool,
             tx::Tx,
             utxo::{find_utxos_for_addr, reindex_utxos, update_utxos},
         },
@@ -136,7 +137,7 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
     reindex_utxos().unwrap();
 
     let tx = Tx::new(from_wallet, &to_address, value).unwrap();
-    db::put_mempool(&tx);
+    add_tx_to_mempool(&tx).unwrap();
 
     println!(
         "Successfully added TX: Sent {} from {} to {}",

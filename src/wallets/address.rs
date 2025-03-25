@@ -108,11 +108,3 @@ pub fn hash_pub_key(pub_key: &PublicKey) -> [u8; 20] {
         .try_into()
         .expect("[Address::hash_pub_key] ERROR: Hash should be 20 bytes")
 }
-
-pub fn bytes_to_hex_string(bytes: &[u8]) -> String {
-    let mut hex_string = String::new();
-    for byte in bytes {
-        write!(hex_string, "{:02x}", byte).unwrap(); // {:02x} formats each byte as hex
-    }
-    hex_string
-}

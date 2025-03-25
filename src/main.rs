@@ -22,6 +22,7 @@ mod networking {
     }
     pub mod server {
         pub mod handlers;
+        pub mod req_types;
         pub mod rest_api;
     }
 }

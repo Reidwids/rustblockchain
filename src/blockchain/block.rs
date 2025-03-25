@@ -6,10 +6,11 @@ use std::{
 };
 
 use crate::{
-    blockchain::chain::get_last_block,
+    blockchain::{chain::get_last_block, transaction::mempool::is_output_spent_in_mempool},
     cli::db,
-    wallets::address::{bytes_to_hex_string, Address},
+    wallets::address::Address,
 };
+use hex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -81,6 +82,13 @@ impl Block {
         for tx in &self.txs {
             tx.verify()
                 .map_err(|e| format!("[block::mine] ERROR: Cannot mine block - {:?}", e))?;
+
+            // Ensure no txs are double spent
+            for tx_input in &tx.inputs {
+                if is_output_spent_in_mempool(tx_input.prev_tx_id, tx_input.out) {
+                    return Err("[block::mine] ERROR: tx contains outputs spent in mempool".into());
+                }
+            }
         }
         println!("Validation successful!");
         println!("Mining block:");
@@ -89,7 +97,7 @@ impl Block {
             hash = self.hash()?;
 
             // Print hash repeating over same line
-            let hex_str = bytes_to_hex_string(&hash);
+            let hex_str = hex::encode(&hash);
             print!("\r{}", hex_str);
             std::io::stdout().flush().unwrap();
 
@@ -106,7 +114,7 @@ impl Block {
 
         self.hash = hash;
         self.nonce = nonce;
-        println!("Hash found: {}", bytes_to_hex_string(&hash));
+        println!("Hash found: {}", hex::encode(&hash));
         println!("Nonce: {}", nonce);
 
         // Prepare block for db

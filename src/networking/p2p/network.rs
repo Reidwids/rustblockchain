@@ -2,7 +2,6 @@ use crate::{
     blockchain::{block::Block, transaction::tx::Tx},
     cli::db,
     networking::node::Node,
-    wallets::address::bytes_to_hex_string,
 };
 use libp2p::{
     futures::StreamExt,
@@ -58,10 +57,10 @@ pub async fn start_p2p_network(
                         println!("P2P Channel received msg");
                     }
                     P2PMessage::BroadcastTx(tx) => {
-                        println!("Broadcasting transaction: {}", bytes_to_hex_string(&tx.id));
+                        println!("Broadcasting transaction: {}", hex::encode(&tx.id));
                     }
                     P2PMessage::BroadcastBlock(block) => {
-                        println!("Broadcasting block: {}", bytes_to_hex_string(&block.hash));
+                        println!("Broadcasting block: {}", hex::encode(&block.hash));
                     }
                 }
             }

@@ -45,14 +45,14 @@ impl Tx {
         let secp = Secp256k1::new();
 
         for input in &self.inputs {
-            trimmed_inputs.push(TxInput {
-                prev_tx_id: input.prev_tx_id,
-                out: input.out,
+            trimmed_inputs.push(TxInput::new(
+                input.prev_tx_id,
+                input.out,
                 // Set the sig to an empty byte array
-                signature: empty_signature(),
+                empty_signature(),
                 // Set the pubkey to a standardized dummy key
-                pub_key: PublicKey::from_secret_key(&secp, &empty_priv_key()),
-            })
+                PublicKey::from_secret_key(&secp, &empty_priv_key()),
+            ))
         }
 
         Tx {
@@ -106,13 +106,14 @@ impl Tx {
             let mut tx_copy = self.trimmed_copy();
 
             // Verify that the prev output pub key hash matches the pub key of the input
-            let prev_tx_out = get_utxo(&input.prev_tx_id, input.out)
-                .expect("[Tx::verify] ERROR: Previous tx missing!");
+            let prev_tx_out = get_utxo(&input.prev_tx_id, input.out)?
+                .ok_or_else(|| format!("[Tx::verify] ERROR: Previous tx missing"))?;
+
             // Recompute the pub key hash from the input's public key
             let computed_pub_key_hash = hash_pub_key(&input.pub_key);
+
             // Check if the computed pub key hash matches the expected one
             if computed_pub_key_hash != prev_tx_out.pub_key_hash {
-                println!("[Tx::verify] ERROR: PubKey does not match PubKeyHash!");
                 return Ok(false);
             }
 
@@ -155,12 +156,12 @@ impl Tx {
 
         // Create a new input from each spendable txo contributing to the sum
         for ((tx_id, out_idx), _) in spendable_txos {
-            inputs.push(TxInput {
-                prev_tx_id: tx_id,
-                out: out_idx,
-                signature: empty_signature(),
-                pub_key: *from_wallet.pub_key(),
-            });
+            inputs.push(TxInput::new(
+                tx_id,
+                out_idx,
+                empty_signature(),
+                *from_wallet.pub_key(),
+            ));
         }
 
         // Create a new output of the to address receiving the value
@@ -212,6 +213,16 @@ pub struct TxInput {
     signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.
     pub_key: PublicKey, // The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
 }
+impl TxInput {
+    pub fn new(prev_tx_id: [u8; 32], out: u32, signature: Signature, pub_key: PublicKey) -> Self {
+        Self {
+            prev_tx_id,
+            out,
+            signature,
+            pub_key,
+        }
+    }
+}
 
 /// Create the coinbase tx
 pub fn coinbase_tx(reward_addr: &Address) -> Result<Tx, Box<dyn Error>> {
@@ -226,12 +237,12 @@ pub fn coinbase_tx(reward_addr: &Address) -> Result<Tx, Box<dyn Error>> {
     let signature = secp.sign_ecdsa(&msg, &secret_key);
 
     // Create the dummy in tx
-    let tx_in = vec![TxInput {
-        prev_tx_id: [0u8; 32],
-        out: u32::MAX,
+    let tx_in = vec![TxInput::new(
+        [0u8; 32],
+        u32::MAX,
         signature,
-        pub_key: PublicKey::from_secret_key(&secp, &secret_key),
-    }];
+        PublicKey::from_secret_key(&secp, &secret_key),
+    )];
 
     // Create the tx out with the creator's pub key hash
     let tx_out = vec![TxOutput {

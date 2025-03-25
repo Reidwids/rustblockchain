@@ -38,6 +38,10 @@ enum Commands {
     #[command(about = "Gets existing wallets from local storage")]
     GetWallets,
 
+    /// Get balance of a given address
+    #[command(about = "Get the balance of a given address")]
+    GetBalance { address: String },
+
     /// Creates a new blockchain or fails if one exists
     #[command(about = "Creates a new blockchain")]
     CreateBlockchain { address: Option<String> },
@@ -52,10 +56,6 @@ enum Commands {
         #[arg(short = 't')]
         show_txs: bool,
     },
-
-    /// Get balance of a given address
-    #[command(about = "Get the balance of a given address")]
-    GetBalance { address: String },
 
     /// Send transaction
     #[command(about = "Send a transaction given an destination address and value")]
