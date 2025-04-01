@@ -179,30 +179,29 @@ pub fn reset_mempool() {
     let _ = ROCKS_DB.delete(MEMPOOL_KEY);
 }
 
-/*** Peer handlers ***/
+// /*** Peer handlers ***/
+// pub fn get_peers() -> PeerCollection {
+//     let peers_data = ROCKS_DB.get(PEERS_KEY.as_bytes()).unwrap();
+//     peers_data
+//         .and_then(|data| bincode::deserialize::<PeerCollection>(&data).ok())
+//         .unwrap_or_else(PeerCollection::new)
+// }
 
-pub fn get_peers() -> PeerCollection {
-    let peers_data = ROCKS_DB.get(PEERS_KEY.as_bytes()).unwrap();
-    peers_data
-        .and_then(|data| bincode::deserialize::<PeerCollection>(&data).ok())
-        .unwrap_or_else(PeerCollection::new)
-}
+// pub fn put_peer(peer_id: PeerId, addr: libp2p::Multiaddr) {
+//     let mut peers = get_peers();
 
-pub fn put_peer(peer_id: PeerId, addr: libp2p::Multiaddr) {
-    let mut peers = get_peers();
+//     if !peers.get(&peer_id).unwrap_or(&vec![]).contains(&addr) {
+//         peers
+//             .entry(peer_id)
+//             // If the entry doesn't exist, create a new Vec<Multiaddr>
+//             .or_insert_with(Vec::new)
+//             .push(addr); // Add the new address to the vector
+//     }
 
-    if !peers.get(&peer_id).unwrap_or(&vec![]).contains(&addr) {
-        peers
-            .entry(peer_id)
-            // If the entry doesn't exist, create a new Vec<Multiaddr>
-            .or_insert_with(Vec::new)
-            .push(addr); // Add the new address to the vector
-    }
-
-    ROCKS_DB
-        .put(
-            PEERS_KEY,
-            bincode::serialize(&peers).expect("[db::put_peer] ERROR: Failed to serialize peers"),
-        )
-        .expect("[db::put_peer] ERROR: Failed to write to DB");
-}
+//     ROCKS_DB
+//         .put(
+//             PEERS_KEY,
+//             bincode::serialize(&peers).expect("[db::put_peer] ERROR: Failed to serialize peers"),
+//         )
+//         .expect("[db::put_peer] ERROR: Failed to write to DB");
+// }

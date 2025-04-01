@@ -6,7 +6,7 @@ use crate::{
             utxo::{find_utxos_for_addr, reindex_utxos},
         },
     },
-    networking::p2p::network::{Inventory, P2PMessage},
+    networking::p2p::network::{NewInventory, P2Prx},
     wallets::address::Address,
 };
 
@@ -30,11 +30,11 @@ pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
 }
 
 pub async fn handle_health_check(
-    tx: State<Sender<P2PMessage>>,
+    tx: State<Sender<P2Prx>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     println!("Received health check request...");
     println!("HTTP Channel sending msg to p2p server...");
-    tx.send(P2PMessage::HealthCheck())
+    tx.send(P2Prx::HealthCheck())
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -122,7 +122,7 @@ pub async fn handle_get_chain(
 }
 
 pub async fn handle_send_tx(
-    p2p: State<Sender<P2PMessage>>,
+    p2p: State<Sender<P2Prx>>,
     Json(payload): Json<TxJson>,
 ) -> Result<Json<serde_json::Value>, ErrorResponse> {
     let tx = payload.to_tx().map_err(|e| ErrorResponse {
@@ -147,7 +147,7 @@ pub async fn handle_send_tx(
     })?;
 
     let _ = p2p
-        .send(P2PMessage::BroadcastInv(Inventory::Transaction(tx.id)))
+        .send(P2Prx::BroadcastNewInv(NewInventory::Transaction(tx.id)))
         .await
         .map_err(|e| ErrorResponse {
             code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
