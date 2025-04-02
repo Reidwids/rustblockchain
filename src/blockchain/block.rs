@@ -51,12 +51,13 @@ impl Block {
     }
 
     /// Create and mine a new block
-    pub fn new(txs: &Vec<Tx>, reward_addr: &Address) -> Result<Self, Box<dyn Error>> {
+    pub fn new(reward_addr: &Address) -> Result<Self, Box<dyn Error>> {
         let cbtx = coinbase_tx(reward_addr)?;
         let prev_block = get_last_block()?;
+        let txs: Vec<Tx> = db::get_mempool().values().cloned().collect();
         let mut all_txs = Vec::with_capacity(txs.len() + 1);
         all_txs.push(cbtx); // Add coinbase first
-        all_txs.extend_from_slice(txs); // Add the rest of the transactions
+        all_txs.extend_from_slice(&txs); // Add the rest of the transactions
 
         Ok(Block {
             hash: [0u8; 32], // Initialize as empty

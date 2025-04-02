@@ -1,7 +1,6 @@
 use libp2p::{
     futures::StreamExt,
     gossipsub::{self, IdentTopic},
-    identity::Keypair,
     kad::{self, store::MemoryStore},
     noise,
     swarm::{NetworkBehaviour, SwarmEvent},
@@ -36,16 +35,15 @@ pub enum P2Prx {
 
 pub async fn start_p2p_network(
     mut rx: mpsc::Receiver<P2Prx>,
-    local_key: Keypair,
+    port: u16,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let peer_id = PeerId::from(&local_key.public());
-    println!("Local peer id: {}", peer_id);
+    let node = Node::get_or_create_keys();
+    println!("Local peer id: {}", node.get_peer_id());
 
-    let port = 4001;
     let p2p_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
 
     // Build swarm with blockchain behaviour
-    let mut swarm = SwarmBuilder::with_existing_identity(local_key.clone())
+    let mut swarm = SwarmBuilder::with_existing_identity(node.get_priv_key().clone())
         .with_tokio()
         .with_tcp(
             tcp::Config::default(),
@@ -53,7 +51,7 @@ pub async fn start_p2p_network(
             yamux::Config::default,
         )
         .unwrap()
-        .with_behaviour(|key| BlockchainBehaviour::create())
+        .with_behaviour(|_| BlockchainBehaviour::create())
         .unwrap()
         .build();
 
@@ -83,7 +81,7 @@ pub async fn start_p2p_network(
                                 let target_peer_id = parts[1];
 
                                 // Check if this message is meant for us
-                                if PeerId::from_str(target_peer_id)? == peer_id {
+                                if PeerId::from_str(target_peer_id)? == node.get_peer_id().clone() {
                                     match parts[2] {
                                         INV_TOPIC_REQ => {
                                             swarm.behaviour_mut().handle_inventory_req(message.data)
@@ -157,7 +155,8 @@ struct BlockchainBehaviour {
 
 impl BlockchainBehaviour {
     fn create() -> Self {
-        let node = Node::get_or_create_peer_id();
+        let node = Node::get_or_create_keys();
+        let peer_id = *node.get_peer_id();
 
         // Configure gossipsub for gossip msgs between peers
         let gossipsub_config = gossipsub::ConfigBuilder::default()
@@ -172,7 +171,7 @@ impl BlockchainBehaviour {
         )
         .expect("[network::blockchain_behavior] ERROR: invalid gossipsub behavior");
 
-        let topics = get_all_topics(node.get_peer_id());
+        let topics = get_all_topics(&peer_id);
 
         for t in topics {
             gossipsub_behaviour
@@ -181,8 +180,8 @@ impl BlockchainBehaviour {
         }
 
         // Configure Kademlia
-        let store = MemoryStore::new(node.get_peer_id().clone());
-        let kademlia = kad::Behaviour::new(node.get_peer_id().clone(), store);
+        let store = MemoryStore::new(peer_id);
+        let kademlia = kad::Behaviour::new(peer_id, store);
 
         Self {
             gossipsub: gossipsub_behaviour,

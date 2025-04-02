@@ -1,17 +1,17 @@
-use crate::networking::p2p::network::P2PMessage;
-
 use axum::{
     routing::{get, post},
     Router,
 };
 use tokio::{net::TcpListener, sync::mpsc::Sender};
 
+use crate::networking::p2p::network::P2Prx;
+
 use super::handlers::{
     handle_get_chain, handle_get_utxos_for_addr, handle_get_wallet_balance, handle_health_check,
     handle_root, handle_send_tx,
 };
 
-pub async fn start_rest_api(tx: Sender<P2PMessage>, port: Option<u16>) {
+pub async fn start_rest_api(tx: Sender<P2Prx>, port: Option<u16>) {
     // Start the HTTP server
     let port = port.unwrap_or(3000);
     let addr = format!("0.0.0.0:{}", port);
@@ -23,7 +23,7 @@ pub async fn start_rest_api(tx: Sender<P2PMessage>, port: Option<u16>) {
         .unwrap();
 }
 
-fn create_router(p2p: Sender<P2PMessage>) -> Router {
+fn create_router(p2p: Sender<P2Prx>) -> Router {
     Router::new()
         .route("/", get(handle_root))
         .route("/health", get(handle_health_check))

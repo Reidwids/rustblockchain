@@ -144,7 +144,7 @@ impl Tx {
         let from_address = from_wallet.get_wallet_address();
 
         // Find spendable outputs to spend as inputs to the new tx
-        let (sum, spendable_txos) = find_spendable_utxos(*from_address.pub_key_hash(), value);
+        let (sum, spendable_txos) = find_spendable_utxos(*from_address.pub_key_hash(), value)?;
 
         // Not enough funds if total spendable is less than new tx value
         if sum < value {
@@ -155,13 +155,15 @@ impl Tx {
         }
 
         // Create a new input from each spendable txo contributing to the sum
-        for ((tx_id, out_idx), _) in spendable_txos {
-            inputs.push(TxInput::new(
-                tx_id,
-                out_idx,
-                empty_signature(),
-                *from_wallet.pub_key(),
-            ));
+        for (tx_id, txo_map) in spendable_txos {
+            for (out_idx, _) in txo_map {
+                inputs.push(TxInput::new(
+                    tx_id,
+                    out_idx,
+                    empty_signature(),
+                    *from_wallet.pub_key(),
+                ));
+            }
         }
 
         // Create a new output of the to address receiving the value

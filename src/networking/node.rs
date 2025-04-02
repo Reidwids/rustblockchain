@@ -10,7 +10,7 @@ pub struct Node {
 
 impl Node {
     /// Get or create the local node ID.
-    pub fn get_or_create_peer_id() -> Self {
+    pub fn get_or_create_keys() -> Self {
         // Try to fetch existing node id
         if let Ok(Some(peer_id_privk_bytes)) = ROCKS_DB.get(NODE_KEY) {
             if let Ok(private_key) = identity::Keypair::ed25519_from_bytes(peer_id_privk_bytes) {

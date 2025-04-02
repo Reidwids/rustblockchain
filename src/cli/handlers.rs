@@ -19,7 +19,7 @@ use crate::{
 };
 
 pub fn handle_get_node_id() {
-    let node = Node::get_or_create_peer_id();
+    let node = Node::get_or_create_keys();
     println!("Node ID: {}", node.get_peer_id());
 }
 
@@ -28,7 +28,8 @@ pub async fn handle_start_node(rest_api_port: &Option<u16>, p2p_port: &Option<u1
     let (tx, rx) = mpsc::channel(32);
 
     // Spawn the P2P network task
-    tokio::spawn(start_p2p_network(rx, *p2p_port));
+    let p2p_port = p2p_port.unwrap_or(4001);
+    tokio::spawn(start_p2p_network(rx, p2p_port));
 
     // Start the HTTP server
     start_rest_api(tx, *rest_api_port).await;
@@ -147,8 +148,7 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
     );
 
     if mine {
-        let mut new_block =
-            Block::new(&db::get_mempool(), &from_wallet.get_wallet_address()).unwrap();
+        let mut new_block = Block::new(&from_wallet.get_wallet_address()).unwrap();
         new_block.mine().unwrap();
         update_utxos(&new_block).unwrap();
         db::reset_mempool();
@@ -187,7 +187,7 @@ pub fn handle_mine(reward_addr: &Option<String>) {
         return;
     }
 
-    let mut new_block = Block::new(&mempool, &from_wallet.get_wallet_address()).unwrap();
+    let mut new_block = Block::new(&from_wallet.get_wallet_address()).unwrap();
     new_block.mine().unwrap();
     update_utxos(&new_block).unwrap();
     db::reset_mempool();

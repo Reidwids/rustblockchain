@@ -103,12 +103,12 @@ impl WalletStore {
         Ok(address)
     }
 
-    pub fn get_local_wallet(&self, addr: &Address) -> Result<&Wallet, String> {
-        self.wallets.get(&addr.get_full_address()).ok_or_else(|| {
-            format!(
-                "[wallet::get_local_wallet] ERROR: Wallet not found for address: {}",
-                addr.get_full_address()
-            )
-        })
-    }
+    // pub fn get_local_wallet(&self, addr: &Address) -> Result<&Wallet, String> {
+    //     self.wallets.get(&addr.get_full_address()).ok_or_else(|| {
+    //         format!(
+    //             "[wallet::get_local_wallet] ERROR: Wallet not found for address: {}",
+    //             addr.get_full_address()
+    //         )
+    //     })
+    // }
 }

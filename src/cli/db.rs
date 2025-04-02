@@ -1,6 +1,5 @@
-use std::{error::Error, sync::Arc};
+use std::{collections::HashMap, error::Error, sync::Arc};
 
-use libp2p::PeerId;
 use once_cell::sync::Lazy;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, DB};
 
@@ -14,7 +13,7 @@ use crate::blockchain::{
 
 pub const LAST_HASH_KEY: &str = "lh";
 const MEMPOOL_KEY: &str = "mempool";
-const PEERS_KEY: &str = "peers";
+// const PEERS_KEY: &str = "peers";
 
 const UTXO_CF: &str = "utxo";
 const BLOCK_CF: &str = "block";
@@ -51,19 +50,6 @@ fn to_utxo_db_key(tx_id: &[u8; 32], out_idx: u32) -> Vec<u8> {
     key.extend_from_slice(tx_id);
     key.extend_from_slice(&out_idx.to_be_bytes());
     key
-}
-
-// TODO: make all db interactions have Result return types
-pub fn from_utxo_db_key(key: &[u8]) -> ([u8; 32], u32) {
-    // Ensure the key has the expected length (36 bytes: 32 for tx_id, 8 for out_idx)
-    assert!(key.len() == 36, "Key length should be 36 bytes");
-
-    let mut tx_id = [0u8; 32];
-    tx_id.copy_from_slice(&key[0..32]); // Copy first 32 bytes into tx_id
-
-    let out_idx = u32::from_be_bytes(key[32..36].try_into().expect("Failed to convert out_idx"));
-
-    (tx_id, out_idx)
 }
 
 /// Returns an option representing a utxo. the utxo will be deserialized if found.
@@ -155,19 +141,22 @@ pub fn put_last_hash(last_hash: &[u8; 32]) {
 }
 
 /*** Mempool DB handlers ***/
-
 pub fn get_mempool() -> Mempool {
     let mempool_data = ROCKS_DB.get(MEMPOOL_KEY.as_bytes()).unwrap();
     mempool_data
-        .and_then(|data| bincode::deserialize(&data).ok())
-        .unwrap_or_else(Vec::new)
+        .and_then(|data| bincode::deserialize(&data).ok()) // Try to deserialize
+        .unwrap_or_else(HashMap::new)
 }
 
 pub fn put_mempool(tx: &Tx) {
     let mut mempool = get_mempool();
-    mempool.push(tx.clone());
+
+    // Insert each output of the transaction into the mempool UTXOSet
+    mempool.insert(tx.id, tx.clone());
+
     let serialized =
-        bincode::serialize(&mempool).expect("[db::put_mempool] ERROR: Failed to serialize tx");
+        bincode::serialize(&mempool).expect("[db::put_mempool] ERROR: Failed to serialize mempool");
+
     ROCKS_DB
         .put(MEMPOOL_KEY, serialized)
         .expect("[db::put_mempool] ERROR: Failed to write to DB");

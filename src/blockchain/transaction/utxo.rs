@@ -9,7 +9,8 @@ use crate::{
 
 use super::{mempool::is_output_spent_in_mempool, tx::TxOutput};
 
-pub type UTXOSet = HashMap<([u8; 32], u32), TxOutput>;
+type TxOutMap = HashMap<u32, TxOutput>;
+pub type UTXOSet = HashMap<[u8; 32], TxOutMap>;
 
 /// Searches through all db entries with the UTXO prefix for utxos with outputs matching the given pub key hash.
 ///
@@ -38,7 +39,10 @@ pub fn find_utxos_for_addr(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
 /// outputs that add to the target amount.
 ///
 /// Spendable utxos must not be present in the mempool.
-pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSet) {
+pub fn find_spendable_utxos(
+    pub_key_hash: [u8; 20],
+    amount: u32,
+) -> Result<(u32, UTXOSet), Box<dyn Error>> {
     let mut utxo_map: UTXOSet = HashMap::new();
     let mut accumulated: u32 = 0;
     let iter = ROCKS_DB.iterator_cf(utxo_cf(), IteratorMode::Start);
@@ -46,24 +50,36 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSe
     for res in iter {
         match res {
             Err(_) => {
-                panic!("[utxo::find_spendable_utxos] ERROR: Failed to iterate through db")
+                return Err(
+                    "[utxo::find_spendable_utxos] ERROR: Failed to iterate through db".into(),
+                );
             }
             Ok((key, val)) => {
-                let tx_out: TxOutput = bincode::deserialize(&val).unwrap();
-                let (tx_id, out_idx) = db::from_utxo_db_key(&key);
-                // If we get a match and we have more room to accumulate, add the
-                // index of the utxo to the map, using the tx id as the key
-                if tx_out.is_locked_with_key(&pub_key_hash)
-                    && accumulated < amount
-                    && !is_output_spent_in_mempool(tx_id, out_idx)
-                {
-                    accumulated += tx_out.value;
-                    utxo_map.insert((tx_id, out_idx), tx_out);
-                    // Stop iterating once we have enough funds
-                    if accumulated >= amount {
-                        break;
+                let tx_id: [u8; 32] = key.into_vec().try_into().map_err(|e| {
+                    format!(
+                        "[utxo::find_spendable_utxos] ERROR: Failed to unwrap key {:?}",
+                        e
+                    )
+                })?;
+                let txo_map: TxOutMap = bincode::deserialize(&val)?;
+                let mut new_txo_map: TxOutMap = HashMap::new();
+                for (out_idx, tx_out) in txo_map.iter() {
+                    // If we get a match and we have more room to accumulate, add the
+                    // index of the utxo to the map, using the tx id as the key
+                    if tx_out.is_locked_with_key(&pub_key_hash)
+                        && accumulated < amount
+                        && !is_output_spent_in_mempool(tx_id, *out_idx)
+                    {
+                        accumulated += tx_out.value;
+
+                        new_txo_map.insert(*out_idx, tx_out.clone());
+                        // Stop iterating once we have enough funds
+                        if accumulated >= amount {
+                            break;
+                        }
                     }
                 }
+                utxo_map.insert(tx_id, new_txo_map);
             }
         }
         // Stop iterating once we have enough funds
@@ -71,14 +87,14 @@ pub fn find_spendable_utxos(pub_key_hash: [u8; 20], amount: u32) -> (u32, UTXOSe
             break;
         }
     }
-    (accumulated, utxo_map)
+    Ok((accumulated, utxo_map))
 }
 
 /// Builds a hashmap containing the UTXO set from the chain found in the database.
 fn get_utxos_from_chain() -> Result<UTXOSet, Box<dyn Error>> {
     let mut utxo_map: UTXOSet = HashMap::new();
     // Map of spent tx out indexes to their respective tx ids
-    let mut spent_txo_idx_map: HashMap<[u8; 32], Vec<u32>> = HashMap::new();
+    let mut spent_txo_map: HashMap<[u8; 32], Vec<u32>> = HashMap::new();
 
     // Get most recent block
     let last_hash = db::get_last_hash()?;
@@ -98,12 +114,15 @@ fn get_utxos_from_chain() -> Result<UTXOSet, Box<dyn Error>> {
                 let out_idx = out_idx
                     .try_into()
                     .expect("[utxo::get_utxos_from_chain] ERROR: Index too large for u32");
-                if let Some(spent_outs) = spent_txo_idx_map.get(&tx.id) {
+                if let Some(spent_outs) = spent_txo_map.get(&tx.id) {
                     if spent_outs.contains(&out_idx) {
                         continue 'outputs;
                     }
                 }
-                utxo_map.insert((tx.id, out_idx), tx_out.clone());
+                utxo_map
+                    .entry(tx.id)
+                    .or_insert_with(HashMap::new) // If `tx_id` isn't found, insert an empty HashMap
+                    .insert(out_idx, tx_out.clone());
             }
 
             // Tx inputs spend outputs from previous txs. By adding the outs to the
@@ -111,7 +130,7 @@ fn get_utxos_from_chain() -> Result<UTXOSet, Box<dyn Error>> {
             // should skip adding an out to the utxo set.
             if !tx.is_coinbase() {
                 for tx_in in &tx.inputs {
-                    spent_txo_idx_map
+                    spent_txo_map
                         .entry(tx_in.prev_tx_id)
                         .or_insert_with(Vec::new)
                         .push(tx_in.out);
@@ -160,8 +179,10 @@ pub fn reindex_utxos() -> Result<(), Box<dyn Error>> {
     let utxos = get_utxos_from_chain()?;
 
     // Loop through all retrieved utxos and add them to the db with utxo prefix
-    for ((tx_id, out_idx), tx_out) in utxos {
-        db::put_utxo(&tx_id, out_idx, &tx_out)?;
+    for (tx_id, txo_map) in utxos {
+        for (out_idx, txo) in txo_map {
+            db::put_utxo(&tx_id, out_idx, &txo)?;
+        }
     }
 
     Ok(())
