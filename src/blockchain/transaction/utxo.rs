@@ -196,7 +196,7 @@ pub fn update_utxos(block: &Block) -> Result<(), Box<dyn Error>> {
             for tx_in in &tx.inputs {
                 // Fetch existing utxos and update by removing any outputs now spent by
                 // a given tx in
-                db::delete_utxo(&tx_in.prev_tx_id, tx_in.out);
+                db::delete_utxo(&tx_in.prev_tx_id, tx_in.out)?;
             }
 
             // Add the new outputs as utxos for future txs
@@ -211,26 +211,26 @@ pub fn update_utxos(block: &Block) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Fetch all utxos from the db. Does not reindex, simply builds a map from the existing utxos in the db.
-pub fn get_all_utxos() -> Result<UTXOSet, Box<dyn Error>> {
-    let mut utxo_map: UTXOSet = HashMap::new();
-    let iter = ROCKS_DB.iterator_cf(utxo_cf(), IteratorMode::Start);
-    for res in iter {
-        match res {
-            Err(_) => {
-                return Err("[db::get_all_utxos] ERROR: Failed to iterate through db".into());
-            }
-            Ok((key, val)) => {
-                let tx_id: [u8; 32] = key.into_vec().try_into().map_err(|e| {
-                    format!(
-                        "[utxo::find_spendable_utxos] ERROR: Failed to unwrap key {:?}",
-                        e
-                    )
-                })?;
-                let txo_map: TxOutMap = bincode::deserialize(&val)?;
-                utxo_map.insert(tx_id, txo_map);
-            }
-        }
-    }
-    Ok(utxo_map)
-}
+// /// Fetch all utxos from the db. Does not reindex, simply builds a map from the existing utxos in the db.
+// pub fn get_all_utxos() -> Result<UTXOSet, Box<dyn Error>> {
+//     let mut utxo_map: UTXOSet = HashMap::new();
+//     let iter = ROCKS_DB.iterator_cf(utxo_cf(), IteratorMode::Start);
+//     for res in iter {
+//         match res {
+//             Err(_) => {
+//                 return Err("[db::get_all_utxos] ERROR: Failed to iterate through db".into());
+//             }
+//             Ok((key, val)) => {
+//                 let tx_id: [u8; 32] = key.into_vec().try_into().map_err(|e| {
+//                     format!(
+//                         "[utxo::find_spendable_utxos] ERROR: Failed to unwrap key {:?}",
+//                         e
+//                     )
+//                 })?;
+//                 let txo_map: TxOutMap = bincode::deserialize(&val)?;
+//                 utxo_map.insert(tx_id, txo_map);
+//             }
+//         }
+//     }
+//     Ok(utxo_map)
+// }

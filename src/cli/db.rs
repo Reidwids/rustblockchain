@@ -62,7 +62,7 @@ pub fn get_utxo(tx_id: &[u8; 32], out_idx: u32) -> Result<Option<TxOutput>, Box<
 }
 
 /// Returns a bool representing if a tx exists in the utxo set
-pub fn utxo_set_contains_tx(tx_id: &[u8; 32]) -> Result<bool, Box<dyn Error>> {
+pub fn utxo_set_contains_tx(tx_id: [u8; 32]) -> Result<bool, Box<dyn Error>> {
     let txo_data = ROCKS_DB
         .get_cf(utxo_cf(), tx_id)
         .map_err(|e| format!("[db::get_utxo] ERROR: Failed to read from DB {:?}", e))?;

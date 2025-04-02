@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    blockchain::{chain::get_last_block, transaction::mempool::is_output_spent_in_mempool},
+    blockchain::{chain::get_last_block, transaction::mempool::mempool_contains_txo},
     cli::db,
     wallets::address::Address,
 };
@@ -86,7 +86,7 @@ impl Block {
 
             // Ensure no txs are double spent
             for tx_input in &tx.inputs {
-                if is_output_spent_in_mempool(tx_input.prev_tx_id, tx_input.out) {
+                if mempool_contains_txo(tx_input.prev_tx_id, tx_input.out) {
                     return Err("[block::mine] ERROR: tx contains outputs spent in mempool".into());
                 }
             }

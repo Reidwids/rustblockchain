@@ -18,6 +18,12 @@ pub fn mempool_contains_txo(tx_id: [u8; 32], out_idx: u32) -> bool {
     return false;
 }
 
+/// Returns the tx from the mempool if found
+pub fn get_tx_from_mempool(tx_id: [u8; 32]) -> Option<Tx> {
+    let mempool = get_mempool();
+    mempool.get(&tx_id).cloned()
+}
+
 /// Check if the mempool contains a given tx
 pub fn mempool_contains_tx(tx_id: [u8; 32]) -> bool {
     let mempool = get_mempool();

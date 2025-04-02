@@ -1,6 +1,6 @@
 use libp2p::{
     futures::StreamExt,
-    gossipsub::{self, IdentTopic},
+    gossipsub::{self, IdentTopic, Message},
     kad::{self, store::MemoryStore},
     noise,
     swarm::{NetworkBehaviour, SwarmEvent},
@@ -11,7 +11,14 @@ use std::{error::Error, str::FromStr};
 use tokio::sync::mpsc;
 
 use crate::{
-    blockchain::{block::Block, transaction::tx::Tx},
+    blockchain::{
+        block::Block,
+        transaction::{
+            mempool::{add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx},
+            tx::Tx,
+        },
+    },
+    cli::db::utxo_set_contains_tx,
     networking::node::Node,
 };
 
@@ -83,11 +90,11 @@ pub async fn start_p2p_network(
                                 // Check if this message is meant for us
                                 if PeerId::from_str(target_peer_id)? == node.get_peer_id().clone() {
                                     match parts[2] {
-                                        INV_TOPIC_REQ => {
-                                            swarm.behaviour_mut().handle_inventory_req(message.data)
+                                        INV_REQ_TOPIC => {
+                                            swarm.behaviour_mut().handle_inventory_req(message)
                                         }
-                                        INV_TOPIC_RES => {
-                                            swarm.behaviour_mut().handle_inventory_res(message.data)
+                                        INV_RES_TOPIC => {
+                                            swarm.behaviour_mut().handle_inventory_res(message)
                                         }
                                         _ => {}
                                     }
@@ -95,7 +102,7 @@ pub async fn start_p2p_network(
                         } else {
                             match topic_str.as_str() {
                                 NEW_INV_TOPIC => {
-                                    swarm.behaviour_mut().handle_new_inventory(message.data);
+                                    swarm.behaviour_mut().handle_new_inventory(message);
                                 }
                                 _ => {}
                         }
@@ -194,24 +201,41 @@ impl BlockchainBehaviour {
         &mut self,
         inv: &NewInventory,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let topic = IdentTopic::new(NEW_INV_TOPIC);
-
         // Serialize inventory
         let serialized_inv = serde_json::to_vec(inv)?;
 
         // Publish to topic
-        self.gossipsub.publish(topic, serialized_inv)?;
+        self.gossipsub
+            .publish(GossipTopic::NewInv.to_ident_topic(), serialized_inv)?;
 
         Ok(())
     }
 
-    fn handle_new_inventory(&mut self, inv_data: Vec<u8>) {
-        match serde_json::from_slice::<NewInventory>(&inv_data) {
+    fn handle_new_inventory(&mut self, message: Message) {
+        let requesting_peer = if let Some(peer) = message.source {
+            peer
+        } else {
+            println!("[network::handle_new_inventory] ERROR: Received message without a source.");
+            return;
+        };
+
+        match serde_json::from_slice::<NewInventory>(&message.data) {
             Ok(inv) => {
                 match inv {
-                    NewInventory::Transaction(tx_hash) => {
-                        // Check if we have the tx in mempool or utxo
-                        // If not, request tx from sender
+                    NewInventory::Transaction(tx_id) => {
+                        if !mempool_contains_tx(tx_id)
+                            && !utxo_set_contains_tx(tx_id).unwrap_or(false)
+                        {
+                            if let Err(e) = self.gossipsub.publish(
+                                GossipTopic::InvReq(requesting_peer).to_ident_topic(),
+                                message.data,
+                            ) {
+                                println!(
+                                    "[network::handle_new_inventory] ERROR: Failed to publish new inventory: {:?}",
+                                    e
+                                );
+                            }
+                        }
                     }
                     NewInventory::Block(block_hash) => {
                         // Check if we have the block
@@ -226,16 +250,45 @@ impl BlockchainBehaviour {
     }
 
     // Handle received inventory message
-    fn handle_inventory_req(&mut self, inv_data: Vec<u8>) {
-        match serde_json::from_slice::<NewInventory>(&inv_data) {
+    fn handle_inventory_req(&mut self, message: Message) {
+        let requesting_peer = if let Some(peer) = message.source {
+            peer
+        } else {
+            println!("[network::handle_inventory_req] ERROR: Received message without a source.");
+            return;
+        };
+
+        match serde_json::from_slice::<NewInventory>(&message.data) {
             Ok(inv) => {
                 match inv {
-                    NewInventory::Transaction(tx_hash) => {
-                        // Recieving request for tx, fetch from utxo set / mempool
-                        // and send back to requester as inventory res
-                        // If not there, do nothing (since it would be mined already)
+                    NewInventory::Transaction(tx_id) => {
+                        let tx = if let Some(tx) = get_tx_from_mempool(tx_id) {
+                            tx
+                        } else {
+                            println!(
+                                "[network::handle_inventory_req] ERROR: tx not found in mempool."
+                            );
+                            return;
+                        };
+                        let serialized_tx = if let Ok(tx) = serde_json::to_vec(&tx) {
+                            tx
+                        } else {
+                            println!(
+                                "[network::handle_inventory_req] ERROR: failed to serialize tx"
+                            );
+                            return;
+                        };
+                        if let Err(e) = self.gossipsub.publish(
+                            GossipTopic::InvRes(requesting_peer).to_ident_topic(),
+                            serialized_tx,
+                        ) {
+                            println!(
+                                "[network::handle_inventory_req] ERROR: Failed to publish inventory req: {:?}",
+                                e
+                            );
+                        }
                     }
-                    NewInventory::Block(block_hash) => {
+                    NewInventory::Block(block_id) => {
                         // Recieving request for block.
                         // Send back to requester as inventory res
                         // If not there, do nothing
@@ -248,12 +301,15 @@ impl BlockchainBehaviour {
         }
     }
 
-    fn handle_inventory_res(&mut self, inv_data: Vec<u8>) {
-        match serde_json::from_slice::<Inventory>(&inv_data) {
+    fn handle_inventory_res(&mut self, message: Message) {
+        match serde_json::from_slice::<Inventory>(&message.data) {
             Ok(inv) => {
                 match inv {
                     Inventory::Transaction(tx) => {
-                        // Action on the received tx - ex. add to mempool
+                        if let Err(e) = add_tx_to_mempool(&tx) {
+                            println!("[network::handle_inventory_res] ERROR: failed to add transaction to mempool: {:?}", e);
+                            return;
+                        }
                     }
                     Inventory::Block(block) => {
                         // Action on the received block - ex. remove txs from mempool
@@ -296,14 +352,39 @@ fn get_seed_nodes() -> Vec<Multiaddr> {
         .collect()
 }
 
+// Create topics
+
 const NEW_INV_TOPIC: &str = "new_inv";
-const INV_TOPIC_REQ: &str = "req_inv";
-const INV_TOPIC_RES: &str = "send_inv";
-/// Create gossip topics. Each topic describes a unique actionable p2p interaction
+const INV_REQ_TOPIC: &str = "inv_req";
+const INV_RES_TOPIC: &str = "inv_res";
+
+#[derive(Debug, Clone)]
+pub enum GossipTopic {
+    NewInv,
+    InvReq(PeerId),
+    InvRes(PeerId),
+}
+
+impl GossipTopic {
+    /// Returns the corresponding `IdentTopic`
+    pub fn to_ident_topic(&self) -> IdentTopic {
+        match self {
+            GossipTopic::NewInv => IdentTopic::new(format!("{}", NEW_INV_TOPIC)),
+            GossipTopic::InvReq(peer_id) => {
+                IdentTopic::new(format!("direct:{}:{}", peer_id, INV_REQ_TOPIC))
+            }
+            GossipTopic::InvRes(peer_id) => {
+                IdentTopic::new(format!("direct:{}:{}", peer_id, INV_RES_TOPIC))
+            }
+        }
+    }
+}
+
+/// Returns all topics relevant to the given peer
 fn get_all_topics(peer_id: &PeerId) -> Vec<IdentTopic> {
     vec![
-        IdentTopic::new(NEW_INV_TOPIC),
-        IdentTopic::new(format!("direct:{}:{}", peer_id, INV_TOPIC_REQ)),
-        IdentTopic::new(format!("direct:{}:{}", peer_id, INV_TOPIC_RES)),
+        GossipTopic::NewInv.to_ident_topic(),
+        GossipTopic::InvReq(peer_id.clone()).to_ident_topic(),
+        GossipTopic::InvRes(peer_id.clone()).to_ident_topic(),
     ]
 }
