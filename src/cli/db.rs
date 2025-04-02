@@ -8,6 +8,7 @@ use crate::blockchain::{
     transaction::{
         mempool::Mempool,
         tx::{Tx, TxOutput},
+        utxo::TxOutMap,
     },
 };
 
@@ -45,37 +46,78 @@ pub fn utxo_cf() -> &'static ColumnFamily {
         .expect("Column family not found")
 }
 
-fn to_utxo_db_key(tx_id: &[u8; 32], out_idx: u32) -> Vec<u8> {
-    let mut key = Vec::with_capacity(36); // 32 bytes for tx_id + 4 bytes for out_idx
-    key.extend_from_slice(tx_id);
-    key.extend_from_slice(&out_idx.to_be_bytes());
-    key
-}
-
 /// Returns an option representing a utxo. the utxo will be deserialized if found.
 pub fn get_utxo(tx_id: &[u8; 32], out_idx: u32) -> Result<Option<TxOutput>, Box<dyn Error>> {
-    let utxo_data = ROCKS_DB
-        .get_cf(utxo_cf(), to_utxo_db_key(tx_id, out_idx))
+    let txo_data = ROCKS_DB
+        .get_cf(utxo_cf(), tx_id)
         .map_err(|e| format!("[db::get_utxo] ERROR: Failed to read from DB {:?}", e))?;
 
-    Ok(utxo_data.and_then(|data| bincode::deserialize(&data).ok()))
+    match txo_data {
+        None => Ok(None),
+        Some(data) => {
+            let txo_map: TxOutMap = bincode::deserialize(&data)?;
+            Ok(txo_map.get(&out_idx).cloned())
+        }
+    }
+}
+
+/// Returns a bool representing if a tx exists in the utxo set
+pub fn utxo_set_contains_tx(tx_id: &[u8; 32]) -> Result<bool, Box<dyn Error>> {
+    let txo_data = ROCKS_DB
+        .get_cf(utxo_cf(), tx_id)
+        .map_err(|e| format!("[db::get_utxo] ERROR: Failed to read from DB {:?}", e))?;
+
+    match txo_data {
+        None => Ok(false),
+        Some(_) => Ok(true),
+    }
 }
 
 pub fn put_utxo(tx_id: &[u8; 32], out_idx: u32, tx_out: &TxOutput) -> Result<(), Box<dyn Error>> {
-    let serialized = bincode::serialize(&tx_out)
+    // Try to get the existing TxOutMap for this transaction ID
+    let mut txo_map = match ROCKS_DB.get_cf(utxo_cf(), tx_id)? {
+        Some(data) => bincode::deserialize::<TxOutMap>(&data)?,
+        None => HashMap::new(), // If no existing map, create a new one
+    };
+
+    txo_map.insert(out_idx, tx_out.clone());
+
+    let serialized = bincode::serialize(&txo_map)
         .map_err(|e| format!("[db::put_utxo] ERROR: Serialization failed {:?}", e))?;
 
     ROCKS_DB
-        .put_cf(utxo_cf(), to_utxo_db_key(tx_id, out_idx), serialized)
+        .put_cf(utxo_cf(), tx_id, serialized)
         .map_err(|e| format!("[db::put_utxo] ERROR: Failed to write to DB {:?}", e))?;
 
     Ok(())
 }
 
-pub fn delete_utxo(tx_id: &[u8; 32], out_idx: u32) {
-    ROCKS_DB
-        .delete_cf(utxo_cf(), to_utxo_db_key(tx_id, out_idx))
-        .expect("[delete] ERROR: Failed to delete from DB")
+pub fn delete_utxo(tx_id: &[u8; 32], out_idx: u32) -> Result<(), Box<dyn Error>> {
+    // Try to get the existing TxOutMap for this transaction ID
+    let mut txo_map = match ROCKS_DB.get_cf(utxo_cf(), tx_id)? {
+        Some(data) => bincode::deserialize::<TxOutMap>(&data)?,
+        None => return Ok(()), // No entry found, nothing to delete
+    };
+
+    // Remove the specific UTXO if it exists
+    if txo_map.remove(&out_idx).is_some() {
+        if txo_map.is_empty() {
+            // If no more outputs remain, remove the entire tx_id entry
+            ROCKS_DB.delete_cf(utxo_cf(), tx_id).map_err(|e| {
+                format!("[db::delete_utxo] ERROR: Failed to delete from DB {:?}", e)
+            })?;
+        } else {
+            // Otherwise, update DB with the modified map
+            let serialized = bincode::serialize(&txo_map)
+                .map_err(|e| format!("[db::delete_utxo] ERROR: Serialization failed {:?}", e))?;
+
+            ROCKS_DB
+                .put_cf(utxo_cf(), tx_id, serialized)
+                .map_err(|e| format!("[db::delete_utxo] ERROR: Failed to update DB {:?}", e))?;
+        }
+    }
+
+    Ok(())
 }
 
 /*** Block DB handlers ***/

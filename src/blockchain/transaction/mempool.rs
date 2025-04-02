@@ -5,7 +5,8 @@ use std::{collections::HashMap, error::Error};
 
 pub type Mempool = HashMap<[u8; 32], Tx>;
 
-pub fn is_output_spent_in_mempool(tx_id: [u8; 32], out_idx: u32) -> bool {
+/// Returns a bool representing if the output exists in any txs stored in the mempool
+pub fn mempool_contains_txo(tx_id: [u8; 32], out_idx: u32) -> bool {
     let mempool = get_mempool();
     for (_, tx) in mempool {
         for tx_in in tx.inputs {
@@ -17,9 +18,18 @@ pub fn is_output_spent_in_mempool(tx_id: [u8; 32], out_idx: u32) -> bool {
     return false;
 }
 
+/// Check if the mempool contains a given tx
+pub fn mempool_contains_tx(tx_id: [u8; 32]) -> bool {
+    let mempool = get_mempool();
+    match mempool.get(&tx_id) {
+        Some(_) => true,
+        None => false,
+    }
+}
+
 pub fn add_tx_to_mempool(tx: &Tx) -> Result<(), Box<dyn Error>> {
     for tx_input in &tx.inputs {
-        if is_output_spent_in_mempool(tx_input.prev_tx_id, tx_input.out) {
+        if mempool_contains_txo(tx_input.prev_tx_id, tx_input.out) {
             return Err(
                 "[mempool::add_tx_to_mempool] ERROR: tx contains outputs spent in mempool".into(),
             );

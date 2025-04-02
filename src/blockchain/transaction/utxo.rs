@@ -7,9 +7,9 @@ use crate::{
     cli::db::{self, utxo_cf, ROCKS_DB},
 };
 
-use super::{mempool::is_output_spent_in_mempool, tx::TxOutput};
+use super::{mempool::mempool_contains_txo, tx::TxOutput};
 
-type TxOutMap = HashMap<u32, TxOutput>;
+pub type TxOutMap = HashMap<u32, TxOutput>;
 pub type UTXOSet = HashMap<[u8; 32], TxOutMap>;
 
 /// Searches through all db entries with the UTXO prefix for utxos with outputs matching the given pub key hash.
@@ -68,7 +68,7 @@ pub fn find_spendable_utxos(
                     // index of the utxo to the map, using the tx id as the key
                     if tx_out.is_locked_with_key(&pub_key_hash)
                         && accumulated < amount
-                        && !is_output_spent_in_mempool(tx_id, *out_idx)
+                        && !mempool_contains_txo(tx_id, *out_idx)
                     {
                         accumulated += tx_out.value;
 
@@ -209,4 +209,28 @@ pub fn update_utxos(block: &Block) -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+/// Fetch all utxos from the db. Does not reindex, simply builds a map from the existing utxos in the db.
+pub fn get_all_utxos() -> Result<UTXOSet, Box<dyn Error>> {
+    let mut utxo_map: UTXOSet = HashMap::new();
+    let iter = ROCKS_DB.iterator_cf(utxo_cf(), IteratorMode::Start);
+    for res in iter {
+        match res {
+            Err(_) => {
+                return Err("[db::get_all_utxos] ERROR: Failed to iterate through db".into());
+            }
+            Ok((key, val)) => {
+                let tx_id: [u8; 32] = key.into_vec().try_into().map_err(|e| {
+                    format!(
+                        "[utxo::find_spendable_utxos] ERROR: Failed to unwrap key {:?}",
+                        e
+                    )
+                })?;
+                let txo_map: TxOutMap = bincode::deserialize(&val)?;
+                utxo_map.insert(tx_id, txo_map);
+            }
+        }
+    }
+    Ok(utxo_map)
 }
