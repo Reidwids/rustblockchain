@@ -17,7 +17,7 @@ pub async fn start_rest_api(tx: Sender<P2Prx>, port: Option<u16>) {
     let addr = format!("0.0.0.0:{}", port);
     let router = create_router(tx.clone());
     let listener = TcpListener::bind(&addr).await.unwrap();
-    println!("REST API listening on {port}");
+    println!("REST API listening on port {port}");
     axum::serve(listener, router.into_make_service())
         .await
         .unwrap();

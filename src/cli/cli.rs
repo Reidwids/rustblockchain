@@ -85,9 +85,9 @@ impl Cli {
         match &cli.command {
             Commands::GetNodeId => handle_get_node_id(),
             Commands::StartNode {
-                p2p_port,
                 rest_api_port,
-            } => handle_start_node(p2p_port, rest_api_port).await,
+                p2p_port,
+            } => handle_start_node(rest_api_port, p2p_port).await,
             Commands::CreateWallet => handle_create_wallet(),
             Commands::GetWallets => handle_get_wallets(),
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),

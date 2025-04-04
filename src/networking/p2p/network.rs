@@ -208,10 +208,12 @@ impl BlockchainBehaviour {
         self.gossipsub
             .publish(GossipTopic::NewInv.to_ident_topic(), serialized_inv)?;
 
+        println!("Broadcasted inventory message to network!");
         Ok(())
     }
 
     fn handle_new_inventory(&mut self, message: Message) {
+        println!("Received inventory message from network");
         let requesting_peer = if let Some(peer) = message.source {
             peer
         } else {
@@ -226,14 +228,17 @@ impl BlockchainBehaviour {
                         if !mempool_contains_tx(tx_id)
                             && !utxo_set_contains_tx(tx_id).unwrap_or(false)
                         {
-                            if let Err(e) = self.gossipsub.publish(
+                            match self.gossipsub.publish(
                                 GossipTopic::InvReq(requesting_peer).to_ident_topic(),
                                 message.data,
                             ) {
-                                println!(
+                               Err(e) =>  println!(
                                     "[network::handle_new_inventory] ERROR: Failed to publish new inventory: {:?}",
                                     e
-                                );
+                                ),
+                                Ok(_)=> println!(
+                                    "Tx not found in chain - requesting tx from sender...",
+                                ),
                             }
                         }
                     }
@@ -252,9 +257,12 @@ impl BlockchainBehaviour {
     // Handle received inventory message
     fn handle_inventory_req(&mut self, message: Message) {
         let requesting_peer = if let Some(peer) = message.source {
+            println!("Received inventory request from peer: {:?}", peer);
             peer
         } else {
-            println!("[network::handle_inventory_req] ERROR: Received message without a source.");
+            println!(
+                "[network::handle_inventory_req] ERROR: Received message from an unknown peer."
+            );
             return;
         };
 
@@ -278,14 +286,15 @@ impl BlockchainBehaviour {
                             );
                             return;
                         };
-                        if let Err(e) = self.gossipsub.publish(
+                        match self.gossipsub.publish(
                             GossipTopic::InvRes(requesting_peer).to_ident_topic(),
                             serialized_tx,
                         ) {
-                            println!(
+                            Err(e) => println!(
                                 "[network::handle_inventory_req] ERROR: Failed to publish inventory req: {:?}",
                                 e
-                            );
+                            ),
+                            Ok(_)=> println!("Sending tx record to peer: {:?}", requesting_peer),
                         }
                     }
                     NewInventory::Block(block_id) => {
@@ -302,13 +311,14 @@ impl BlockchainBehaviour {
     }
 
     fn handle_inventory_res(&mut self, message: Message) {
+        println!("Inventory record successfully retrieved");
         match serde_json::from_slice::<Inventory>(&message.data) {
             Ok(inv) => {
                 match inv {
                     Inventory::Transaction(tx) => {
-                        if let Err(e) = add_tx_to_mempool(&tx) {
-                            println!("[network::handle_inventory_res] ERROR: failed to add transaction to mempool: {:?}", e);
-                            return;
+                        match add_tx_to_mempool(&tx) {
+                            Err(e) => println!("[network::handle_inventory_res] ERROR: failed to add transaction to mempool: {:?}", e),
+                            Ok(_)=>println!("Tx was successfully committed to the mempool")
                         }
                     }
                     Inventory::Block(block) => {
