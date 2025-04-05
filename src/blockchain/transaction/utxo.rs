@@ -40,9 +40,9 @@ pub fn find_utxos_for_addr(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
 ///
 /// Spendable utxos must not be present in the mempool.
 pub fn find_spendable_utxos(
-    pub_key_hash: [u8; 20],
+    pub_key_hash: &[u8; 20],
     amount: u32,
-) -> Result<(u32, UTXOSet), Box<dyn Error>> {
+) -> Result<UTXOSet, Box<dyn Error>> {
     let mut utxo_map: UTXOSet = HashMap::new();
     let mut accumulated: u32 = 0;
     let iter = ROCKS_DB.iterator_cf(utxo_cf(), IteratorMode::Start);
@@ -87,7 +87,16 @@ pub fn find_spendable_utxos(
             break;
         }
     }
-    Ok((accumulated, utxo_map))
+    // Not enough funds if total spendable is less than new tx value
+    if amount < accumulated {
+        return Err(format!(
+            "[tx::new] ERROR: {:?} does not have enough funds!!!",
+            pub_key_hash
+        )
+        .into());
+    }
+
+    Ok(utxo_map)
 }
 
 /// Builds a hashmap containing the UTXO set from the chain found in the database.

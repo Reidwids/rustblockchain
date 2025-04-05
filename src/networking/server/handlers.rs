@@ -3,7 +3,7 @@ use crate::{
         chain::get_blockchain_json,
         transaction::{
             mempool::add_tx_to_mempool,
-            utxo::{find_utxos_for_addr, reindex_utxos},
+            utxo::{find_spendable_utxos, find_utxos_for_addr, reindex_utxos},
         },
     },
     networking::p2p::network::{NewInventory, P2Prx},
@@ -15,12 +15,11 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
-use hex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::mpsc::Sender;
 
-use super::req_types::TxJson;
+use super::req_types::{convert_utxoset_to_json, TxJson, UTXOSetJson};
 
 pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(Json(json!({
@@ -80,10 +79,27 @@ pub async fn handle_get_wallet_balance(
     })))
 }
 
-pub async fn handle_get_utxos_for_addr(
-    Path(addr): Path<String>,
-) -> Result<Json<serde_json::Value>, ErrorResponse> {
-    let wallet_addr: Address = match Address::new_from_str(&addr) {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetUTXORes {
+    pub address: String,
+    pub utxos: UTXOSetJson,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UTXOJson {
+    pub value: u32,
+    pub pub_key_hash: String, // This is hex-encoded
+}
+
+#[derive(Deserialize)]
+pub struct UTXOQuery {
+    address: String,
+    amount: u32,
+}
+pub async fn handle_get_spendable_utxos(
+    Query(params): Query<UTXOQuery>,
+) -> Result<Json<GetUTXORes>, ErrorResponse> {
+    let wallet_addr: Address = match Address::new_from_str(&params.address) {
         Ok(addr) => addr,
         Err(e) => {
             return Err(ErrorResponse {
@@ -92,17 +108,22 @@ pub async fn handle_get_utxos_for_addr(
             })
         }
     };
-    let utxos = find_utxos_for_addr(wallet_addr.pub_key_hash());
 
-    Ok(Json(json!({
-        "address": addr,
-        "utxos": utxos.iter().map(|utxo| {
-            json!({
-                "value": utxo.value,
-                "pub_key_hash": hex::encode(&utxo.pub_key_hash),
+    let spendable_utxos = match find_spendable_utxos(wallet_addr.pub_key_hash(), params.amount) {
+        Ok(map) => map,
+        Err(e) => {
+            return Err(ErrorResponse {
+                code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                error: e.to_string(),
             })
-        }).collect::<Vec<_>>() // Collect into Vec<serde_json::Value>
-    })))
+        }
+    };
+
+    let utxos: UTXOSetJson = convert_utxoset_to_json(&spendable_utxos);
+    Ok(Json(GetUTXORes {
+        address: wallet_addr.get_full_address(),
+        utxos,
+    }))
 }
 
 #[derive(Deserialize)]

@@ -9,7 +9,7 @@ use crate::cli::db::get_utxo;
 use crate::wallets::address::{hash_pub_key, Address};
 use crate::wallets::wallet::Wallet;
 
-use super::utxo::find_spendable_utxos;
+use super::utxo::UTXOSet;
 
 /** Constants **/
 const COINBASE_REWARD: u32 = 100;
@@ -138,31 +138,22 @@ impl Tx {
         from_wallet: &Wallet,
         to_address: &Address,
         value: u32,
+        spendable_txos: UTXOSet,
     ) -> Result<Tx, Box<dyn Error>> {
         let mut inputs: Vec<TxInput> = Vec::new();
         let mut outputs: Vec<TxOutput> = Vec::new();
-        let from_address = from_wallet.get_wallet_address();
-
-        // Find spendable outputs to spend as inputs to the new tx
-        let (sum, spendable_txos) = find_spendable_utxos(*from_address.pub_key_hash(), value)?;
-
-        // Not enough funds if total spendable is less than new tx value
-        if sum < value {
-            panic!(
-                "[tx::new] ERROR: {} does not have enough funds!!!",
-                from_address.get_full_address()
-            )
-        }
+        let mut sum = 0;
 
         // Create a new input from each spendable txo contributing to the sum
         for (tx_id, txo_map) in spendable_txos {
-            for (out_idx, _) in txo_map {
+            for (out_idx, txo) in txo_map {
                 inputs.push(TxInput::new(
                     tx_id,
                     out_idx,
                     empty_signature(),
                     *from_wallet.pub_key(),
                 ));
+                sum += txo.value;
             }
         }
 
@@ -176,7 +167,7 @@ impl Tx {
         if sum > value {
             outputs.push(TxOutput {
                 value: sum - value,
-                pub_key_hash: *from_address.pub_key_hash(),
+                pub_key_hash: *from_wallet.get_wallet_address().pub_key_hash(),
             });
         }
 

@@ -99,7 +99,7 @@ impl Cli {
                 value,
                 from,
                 mine,
-            } => handle_send_tx(to, *value, from, *mine),
+            } => handle_send_tx(to, *value, from, *mine).await,
             Commands::Mine { reward_addr } => handle_mine(reward_addr),
         }
     }

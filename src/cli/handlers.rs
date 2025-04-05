@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use reqwest::Client;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -5,13 +8,20 @@ use crate::{
         block::Block,
         chain::{clear_blockchain, create_blockchain, get_blockchain_json},
         transaction::{
-            mempool::add_tx_to_mempool,
             tx::Tx,
-            utxo::{find_utxos_for_addr, reindex_utxos, update_utxos},
+            utxo::{find_utxos_for_addr, reindex_utxos, update_utxos, UTXOSet},
         },
     },
     cli::db,
-    networking::{node::Node, p2p::network::start_p2p_network, server::rest_api::start_rest_api},
+    networking::{
+        node::Node,
+        p2p::network::start_p2p_network,
+        server::{
+            handlers::GetUTXORes,
+            req_types::convert_json_to_utxoset,
+            rest_api::{start_rest_api, SEED_API_NODE},
+        },
+    },
     wallets::{
         address::Address,
         wallet::{Wallet, WalletStore},
@@ -108,7 +118,9 @@ pub fn handle_get_balance(req_addr: &String) {
     println!("Balance: {}", balance);
 }
 
-pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool) {
+pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>, _: bool) {
+    let client = Client::new();
+
     let wallet_store = WalletStore::init_wallet_store()
         .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
     let from_wallet: &Wallet;
@@ -134,25 +146,75 @@ pub fn handle_send_tx(to: &String, value: u32, from: &Option<String>, mine: bool
         }
     }
 
-    let to_address = Address::new_from_str(to.as_str()).unwrap();
-    reindex_utxos().unwrap();
+    let from_address = from_wallet.get_wallet_address();
 
-    let tx = Tx::new(from_wallet, &to_address, value).unwrap();
-    add_tx_to_mempool(&tx).unwrap();
-
-    println!(
-        "Successfully added TX: Sent {} from {} to {}",
-        value,
-        from_wallet.get_wallet_address().get_full_address(),
-        to
+    let url = format!(
+        "{}/utxo?address={}&amount={}",
+        SEED_API_NODE,
+        from_address.get_full_address(),
+        value
     );
 
-    if mine {
-        let mut new_block = Block::new(&from_wallet.get_wallet_address()).unwrap();
-        new_block.mine().unwrap();
-        update_utxos(&new_block).unwrap();
-        db::reset_mempool();
+    let mut utxos: UTXOSet = HashMap::new();
+
+    match client.get(url).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                match response.json::<GetUTXORes>().await {
+                    Ok(data) => match convert_json_to_utxoset(&data.utxos) {
+                        Ok(set) => {
+                            utxos = set;
+                        }
+                        Err(e) => {
+                            println!("Failed to convert UTXO JSON to UTXOSet: {:?}", e);
+                        }
+                    },
+                    Err(e) => println!("Failed to parse UTXO response: {:?}", e),
+                }
+            } else {
+                println!("Request failed with status: {}", response.status());
+            }
+        }
+        Err(e) => println!("Failed to connect to node: {:?}", e),
     }
+
+    let to_address = match Address::new_from_str(to.as_str()) {
+        Ok(a) => a,
+        Err(e) => {
+            println!("Invalid destination address: {:?}", e);
+            return;
+        }
+    };
+
+    let tx = match Tx::new(from_wallet, &to_address, value, utxos) {
+        Ok(tx) => tx,
+        Err(e) => {
+            println!("Failed to create tx: {:?}", e);
+            return;
+        }
+    };
+
+    let url = format!("{}/tx/send", SEED_API_NODE);
+
+    match client.post(&url).json(&tx).send().await {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                println!("Transaction sent successfully");
+            } else {
+                println!("Failed to send transaction: {}", resp.status());
+            }
+        }
+        Err(e) => {
+            println!("Error sending request: {:?}", e);
+        }
+    }
+
+    // if mine {
+    //     let mut new_block = Block::new(&from_wallet.get_wallet_address()).unwrap();
+    //     new_block.mine().unwrap();
+    //     update_utxos(&new_block).unwrap();
+    //     db::reset_mempool();
+    // }
 }
 
 pub fn handle_mine(reward_addr: &Option<String>) {
