@@ -31,7 +31,7 @@ fn create_router(p2p: Sender<P2Prx>) -> Router {
         .route("/", get(handle_root))
         .route("/health", get(handle_health_check))
         .route("/wallet/balance/{addr}", get(handle_get_wallet_balance))
-        .route("/utxo/{addr}", get(handle_get_spendable_utxos))
+        .route("/utxo", get(handle_get_spendable_utxos))
         .route("/chain", get(handle_get_chain))
         .route("/tx/send", post(handle_send_tx))
         .with_state(p2p)
