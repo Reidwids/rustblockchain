@@ -42,7 +42,36 @@ impl TxJson {
                 .collect::<Result<Vec<TxOutput>, Box<dyn Error>>>()?,
         })
     }
+
+    pub fn from_tx(tx: &Tx) -> Result<Self, Box<dyn Error>> {
+        Ok(Self {
+            id: hex::encode(&tx.id),
+            inputs: tx
+                .inputs
+                .iter()
+                .map(|input| {
+                    Ok(TxInputJson {
+                        prev_tx_id: hex::encode(&input.prev_tx_id),
+                        out: input.out,
+                        signature: encode_sig(&input.signature)?,
+                        pub_key: encode_pubkey(&input.pub_key)?,
+                    })
+                })
+                .collect::<Result<Vec<TxInputJson>, Box<dyn Error>>>()?,
+            outputs: tx
+                .outputs
+                .iter()
+                .map(|output| {
+                    Ok(TxOutputJson {
+                        value: output.value,
+                        pub_key_hash: hex::encode(&output.pub_key_hash),
+                    })
+                })
+                .collect::<Result<Vec<TxOutputJson>, Box<dyn Error>>>()?,
+        })
+    }
 }
+
 fn decode_hex<T: TryFrom<Vec<u8>>>(hex: &str) -> Result<T, Box<dyn Error>> {
     decode(hex)?
         .try_into()
@@ -57,6 +86,14 @@ fn decode_sig(sig: &str) -> Result<Signature, Box<dyn Error>> {
 fn decode_pubkey(pubkey: &str) -> Result<PublicKey, Box<dyn Error>> {
     PublicKey::from_slice(&decode(pubkey)?)
         .map_err(|_| "[tx_json::decode_pub_key] ERROR: Invalid public key".into())
+}
+
+fn encode_sig(sig: &Signature) -> Result<String, Box<dyn Error>> {
+    Ok(hex::encode(sig.serialize_der()))
+}
+
+fn encode_pubkey(pubkey: &PublicKey) -> Result<String, Box<dyn Error>> {
+    Ok(hex::encode(pubkey.serialize()))
 }
 
 #[derive(Serialize, Deserialize)]

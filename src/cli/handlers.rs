@@ -18,7 +18,7 @@ use crate::{
         p2p::network::start_p2p_network,
         server::{
             handlers::GetUTXORes,
-            req_types::convert_json_to_utxoset,
+            req_types::{convert_json_to_utxoset, TxJson},
             rest_api::{start_rest_api, SEED_API_NODE},
         },
     },
@@ -196,7 +196,15 @@ pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>, _: b
 
     let url = format!("{}/tx/send", SEED_API_NODE);
 
-    match client.post(&url).json(&tx).send().await {
+    let tx_json = match TxJson::from_tx(&tx) {
+        Ok(tx) => tx,
+        Err(e) => {
+            println!("Failed to serialize tx: {:?}", e);
+            return;
+        }
+    };
+
+    match client.post(&url).json(&tx_json).send().await {
         Ok(resp) => {
             if resp.status().is_success() {
                 println!("Transaction sent successfully");

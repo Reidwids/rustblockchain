@@ -203,8 +203,8 @@ impl TxOutput {
 pub struct TxInput {
     pub prev_tx_id: [u8; 32], // ID of the transaction the output is inside of
     pub out: u32,             // Index that the output appears within the referenced transaction
-    signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.
-    pub_key: PublicKey, // The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
+    pub signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.
+    pub pub_key: PublicKey, // The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
 }
 impl TxInput {
     pub fn new(prev_tx_id: [u8; 32], out: u32, signature: Signature, pub_key: PublicKey) -> Self {

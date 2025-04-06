@@ -12,28 +12,43 @@ impl Node {
     /// Get or create the local node ID.
     pub fn get_or_create_keys() -> Self {
         // Try to fetch existing node id
-        if let Ok(Some(peer_id_privk_bytes)) = ROCKS_DB.get(NODE_KEY) {
-            if let Ok(private_key) = identity::Keypair::ed25519_from_bytes(peer_id_privk_bytes) {
-                return Self {
-                    public_key: PeerId::from_public_key(&private_key.public()),
-                    private_key,
-                };
+        match ROCKS_DB.get(NODE_KEY) {
+            Ok(Some(peer_id_privk_bytes)) => {
+                // Try to decode using protobuf (matching encoding method)
+                match identity::Keypair::from_protobuf_encoding(&peer_id_privk_bytes) {
+                    Ok(private_key) => {
+                        let public_key = PeerId::from_public_key(&private_key.public());
+                        return Self {
+                            public_key,
+                            private_key,
+                        };
+                    }
+                    Err(_) => {
+                        // Continue to keychain creation
+                    }
+                }
             }
+            // Continue to keychain creation
+            Ok(None) => {}
+            Err(_) => {}
         }
 
-        // Else create the node id
+        // Create new key
         let private_key = identity::Keypair::generate_ed25519();
-        let encoded = private_key
-            .to_protobuf_encoding()
-            .expect("[node::get_or_create_peer_id] ERROR: Failed to encode node private key");
+        let public_key = PeerId::from_public_key(&private_key.public());
 
-        // Store it in RocksDB
-        ROCKS_DB
-            .put(NODE_KEY, encoded)
-            .expect("[node::get_or_create_peer_id] ERROR: Failed to store node id in RocksDB");
+        // Store using protobuf encoding
+        if let Ok(encoded) = private_key.to_protobuf_encoding() {
+            let _ = ROCKS_DB.put(NODE_KEY, encoded);
+        }
+
+        println!(
+            "No local node keys found. Created new peer id: {:?}",
+            public_key
+        );
 
         Self {
-            public_key: PeerId::from_public_key(&private_key.public()),
+            public_key,
             private_key,
         }
     }

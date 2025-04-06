@@ -25,9 +25,18 @@ pub fn find_utxos_for_addr(pub_key_hash: &[u8; 20]) -> Vec<TxOutput> {
                 panic!("[utxo::find_utxos_for_addr] ERROR: Failed to iterate through db")
             }
             Ok((_, val)) => {
-                let tx_out: TxOutput = bincode::deserialize(&val).unwrap();
-                if tx_out.is_locked_with_key(pub_key_hash) {
-                    utxos.push(tx_out);
+                let tx_out_map: HashMap<u32, TxOutput> = match bincode::deserialize(&val) {
+                    Ok(map) => map,
+                    Err(e) => {
+                        println!("Failed to deserialize TxOutMap: {:?}", e);
+                        continue;
+                    }
+                };
+
+                for (_, tx_out) in tx_out_map {
+                    if tx_out.is_locked_with_key(pub_key_hash) {
+                        utxos.push(tx_out);
+                    }
                 }
             }
         }
@@ -88,12 +97,10 @@ pub fn find_spendable_utxos(
         }
     }
     // Not enough funds if total spendable is less than new tx value
-    if amount < accumulated {
-        return Err(format!(
-            "[tx::new] ERROR: {:?} does not have enough funds!!!",
-            pub_key_hash
-        )
-        .into());
+    if accumulated < amount {
+        return Err(
+            format!("[tx::new] ERROR: provided address does not have enough funds!!!",).into(),
+        );
     }
 
     Ok(utxo_map)

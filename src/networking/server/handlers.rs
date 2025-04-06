@@ -113,9 +113,10 @@ pub async fn handle_get_spendable_utxos(
         Ok(map) => map,
         Err(e) => {
             return Err(ErrorResponse {
+                // Add check for not enough funds, should be bad request
                 code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
                 error: e.to_string(),
-            })
+            });
         }
     };
 
