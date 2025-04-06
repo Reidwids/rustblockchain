@@ -278,12 +278,11 @@ impl BlockchainBehaviour {
                             );
                             return;
                         };
-                        let serialized_tx = if let Ok(tx) = serde_json::to_vec(&tx) {
-                            tx
+                        let inventory = Inventory::Transaction(tx);
+                        let serialized_tx = if let Ok(bytes) = serde_json::to_vec(&inventory) {
+                            bytes
                         } else {
-                            println!(
-                                "[network::handle_inventory_req] ERROR: failed to serialize tx"
-                            );
+                            println!("[network::handle_inventory_req] ERROR: failed to serialize inventory");
                             return;
                         };
                         match self.gossipsub.publish(
@@ -316,6 +315,7 @@ impl BlockchainBehaviour {
             Ok(inv) => {
                 match inv {
                     Inventory::Transaction(tx) => {
+                        // TODO: Validate tx against blockchain
                         match add_tx_to_mempool(&tx) {
                             Err(e) => println!("[network::handle_inventory_res] ERROR: failed to add transaction to mempool: {:?}", e),
                             Ok(_)=>println!("Tx was successfully committed to the mempool")
