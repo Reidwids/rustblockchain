@@ -83,6 +83,14 @@ pub async fn start_p2p_network(
             // Handle network events
             event = swarm.select_next_some() => {
                 match event {
+                    SwarmEvent::Behaviour(BlockchainBehaviourEvent::Gossipsub(
+                        gossipsub::Event::Subscribed { peer_id: _, topic } ))=> {
+                        if topic.as_str() == CHAIN_SYNC_REQ_TOPIC {
+                            if let Err(e) = swarm.behaviour_mut().publish_chainsync_req() {
+                                println!("Failed to publish chain sync request: {}", e);
+                            }
+                        }
+                    }
                     // Handle gossipsub messages (original functionality)
                     SwarmEvent::Behaviour(BlockchainBehaviourEvent::Gossipsub(
                         gossipsub::Event::Message { message, .. }
@@ -138,10 +146,6 @@ pub async fn start_p2p_network(
                                         println!("Bootstrapped Kademlia DHT");
                                     },
                                     Err(e) => eprintln!("Failed to bootstrap Kademlia DHT: {}", e),
-                                }
-                                // Publish chainsync event
-                                if let Err(e) = swarm.behaviour_mut().publish_chainsync_req() {
-                                    eprintln!("Failed to broadcast inventory: {}", e);
                                 }
                             }
                             _ => {}
