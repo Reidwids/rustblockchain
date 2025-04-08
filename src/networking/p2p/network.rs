@@ -12,7 +12,8 @@ use tokio::sync::mpsc;
 
 use crate::{
     blockchain::{
-        block::Block,
+        block::{get_blocks_since_height, Block},
+        chain::{clear_blockchain, get_last_block},
         transaction::{
             mempool::{add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx},
             tx::Tx,
@@ -65,8 +66,16 @@ pub async fn start_p2p_network(
     // Listen on a specific port
     swarm.listen_on(p2p_addr.clone()).unwrap();
 
-    // Load and connect to bootstrap nodes
-    bootstrap_kademlia(&mut swarm).await;
+    // Get bootstrap nodes
+    let bootstrap_nodes = get_seed_nodes();
+
+    // Connect to each bootstrap node. Successful dial actions create a "connection established" event, at which point they're added to kademlia
+    for node_addr in bootstrap_nodes {
+        match swarm.dial(node_addr.clone()) {
+            Ok(_) => println!("Dialed bootstrap node: {}", node_addr),
+            Err(e) => eprintln!("Failed to dial bootstrap node {}: {}", node_addr, e),
+        }
+    }
 
     // Main event loop
     loop {
@@ -79,6 +88,8 @@ pub async fn start_p2p_network(
                         gossipsub::Event::Message { message, .. }
                     )) => {
                         let topic_str = message.topic.to_string();
+
+                        // --- HANDLERS FOR ALL DIRECT MSGS --- //
                         if topic_str.starts_with("direct:") {
                             let parts: Vec<&str> = topic_str.split(':').collect();
 
@@ -96,13 +107,20 @@ pub async fn start_p2p_network(
                                         INV_RES_TOPIC => {
                                             swarm.behaviour_mut().handle_inventory_res(message)
                                         }
+                                        CHAIN_SYNC_RES_TOPIC => {
+                                            swarm.behaviour_mut().handle_chainsync_res(message)
+                                        }
                                         _ => {}
                                     }
                                 }
                         } else {
+                            // ----- HANDLERS FOR GOSSIP MSGS ----- //
                             match topic_str.as_str() {
                                 NEW_INV_TOPIC => {
                                     swarm.behaviour_mut().handle_new_inventory(message);
+                                }
+                                CHAIN_SYNC_REQ_TOPIC => {
+                                    swarm.behaviour_mut().handle_chainsync_req(message);
                                 }
                                 _ => {}
                         }
@@ -114,6 +132,13 @@ pub async fn start_p2p_network(
                         match event {
                             kad::Event::RoutingUpdated { peer, .. } => {
                                 println!("Kademlia routing updated for peer: {}", peer);
+                                // Bootstrap Kademlia on new connections
+                                    match swarm.behaviour_mut().kademlia.bootstrap() {
+                                        Ok(_) => {
+                                            println!("Bootstrapping Kademlia DHT...");
+                                        },
+                                        Err(e) => eprintln!("Failed to bootstrap Kademlia DHT: {}", e),
+                                    }
                             }
                             _ => {}
                         }
@@ -130,12 +155,17 @@ pub async fn start_p2p_network(
 
                         // Add connected peer to Kademlia routing table
                         swarm.behaviour_mut().kademlia.add_address(&peer_id, endpoint.get_remote_address().clone());
+
+                        // Publish chainsync event
+                        if let Err(e) = swarm.behaviour_mut().publish_chainsync_req() {
+                            eprintln!("Failed to broadcast inventory: {}", e);
+                        }
                     }
                     _ => {}
                 }
             }
 
-            // Handle local broadcast requests
+            // ----- HANDLERS FOR LOCAL BROADCAST REQUESTS ----- //
             Some(message) = rx.recv() => {
                 match message {
                     P2Prx::BroadcastNewInv(inv) => {
@@ -196,7 +226,7 @@ impl BlockchainBehaviour {
         }
     }
 
-    // Method to publish inventory
+    // Method to publish inventory to all peers
     fn publish_new_inventory(
         &mut self,
         inv: &NewInventory,
@@ -209,6 +239,28 @@ impl BlockchainBehaviour {
             .publish(GossipTopic::NewInv.to_ident_topic(), serialized_inv)?;
 
         println!("Broadcasted inventory message to network!");
+        Ok(())
+    }
+
+    // Method to publish chainsync request to all peers
+    fn publish_chainsync_req(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        // Send chain height
+        let height = match get_last_block() {
+            Ok(b) => b.height,
+            Err(_) => {
+                println!("Failed to find latest block - refreshing blockchain");
+                clear_blockchain();
+                0
+            }
+        };
+
+        let serialized = serde_json::to_vec(&height)?;
+
+        // Publish to topic
+        self.gossipsub
+            .publish(GossipTopic::ChainSyncReq.to_ident_topic(), serialized)?;
+
+        println!("Broadcasted chainsync message to network!");
         Ok(())
     }
 
@@ -331,25 +383,96 @@ impl BlockchainBehaviour {
             }
         }
     }
-}
 
-// Bootstrap Kademlia with configured seed nodes
-async fn bootstrap_kademlia(swarm: &mut Swarm<BlockchainBehaviour>) {
-    // Get bootstrap nodes
-    let bootstrap_nodes = get_seed_nodes();
+    fn handle_chainsync_req(&mut self, message: Message) {
+        let requesting_peer = if let Some(peer) = message.source {
+            println!("Received chainsync request from peer: {:?}", peer);
+            peer
+        } else {
+            println!(
+                "[network::handle_chainsync_req] ERROR: Received message from an unknown peer."
+            );
+            return;
+        };
 
-    // Connect to each bootstrap node. Successful dial actions create a "connection established" event, at which point they're added to kademlia
-    for node_addr in bootstrap_nodes {
-        match swarm.dial(node_addr.clone()) {
-            Ok(_) => println!("Dialed bootstrap node: {}", node_addr),
-            Err(e) => eprintln!("Failed to dial bootstrap node {}: {}", node_addr, e),
+        let height = match serde_json::from_slice::<u32>(&message.data) {
+            Ok(h) => h,
+            Err(e) => {
+                println!("Failed to deserialize height data: {}", e);
+                return;
+            }
+        };
+
+        let blocks = match get_blocks_since_height(height) {
+            Ok(h) => h,
+            Err(e) => {
+                println!("Failed to handle chainsync request: {}", e);
+                return;
+            }
+        };
+        let block_hashes: Vec<[u8; 32]> = blocks.iter().map(|b| b.hash).collect();
+        let payload = if let Ok(bytes) = serde_json::to_vec(&block_hashes) {
+            bytes
+        } else {
+            println!("[network::handle_chainsync_req] ERROR: failed to serialize block hashes");
+            return;
+        };
+        match self.gossipsub.publish(
+            GossipTopic::ChainSyncRes(requesting_peer).to_ident_topic(),
+            payload,
+        ) {
+            Err(e) => println!(
+                "[network::handle_chainsync_req] ERROR: Failed to publish chainsync res: {:?}",
+                e
+            ),
+            Ok(_) => println!(
+                "Sending chainsync block hashes to peer: {:?}",
+                requesting_peer
+            ),
         }
     }
 
-    // Bootstrap Kademlia DHT
-    match swarm.behaviour_mut().kademlia.bootstrap() {
-        Ok(_) => println!("Bootstrapping Kademlia DHT"),
-        Err(e) => eprintln!("Failed to bootstrap Kademlia DHT: {}", e),
+    fn handle_chainsync_res(&mut self, message: Message) {
+        let requesting_peer = if let Some(peer) = message.source {
+            println!("Received chainsync response from peer: {:?}", peer);
+            peer
+        } else {
+            println!(
+                "[network::handle_chainsync_res] ERROR: Received message from an unknown peer."
+            );
+            return;
+        };
+
+        match serde_json::from_slice::<Vec<[u8; 32]>>(&message.data) {
+            Ok(block_hashes) => {
+                for block_hash in block_hashes {
+                    let inventory = NewInventory::Block(block_hash);
+                    let serialized_bh = if let Ok(bytes) = serde_json::to_vec(&inventory) {
+                        bytes
+                    } else {
+                        println!(
+                            "[network::handle_chainsync_res] ERROR: failed to serialize inventory"
+                        );
+                        return;
+                    };
+                    match self.gossipsub.publish(
+                        GossipTopic::InvReq(requesting_peer).to_ident_topic(),
+                        serialized_bh,
+                    ) {
+                       Err(e) =>  println!(
+                            "[network::handle_new_inventory] ERROR: Failed to publish new inventory: {:?}",
+                            e
+                        ),
+                        Ok(_)=> println!(
+                            "Tx not found in chain - requesting tx from sender...",
+                        ),
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to deserialize blockhash data: {}", e);
+            }
+        }
     }
 }
 
@@ -363,16 +486,19 @@ fn get_seed_nodes() -> Vec<Multiaddr> {
 }
 
 // Create topics
-
 const NEW_INV_TOPIC: &str = "new_inv";
 const INV_REQ_TOPIC: &str = "inv_req";
 const INV_RES_TOPIC: &str = "inv_res";
+const CHAIN_SYNC_REQ_TOPIC: &str = "chain_sync_req";
+const CHAIN_SYNC_RES_TOPIC: &str = "chain_sync_res";
 
 #[derive(Debug, Clone)]
 pub enum GossipTopic {
     NewInv,
     InvReq(PeerId),
     InvRes(PeerId),
+    ChainSyncReq,
+    ChainSyncRes(PeerId),
 }
 
 impl GossipTopic {
@@ -385,6 +511,10 @@ impl GossipTopic {
             }
             GossipTopic::InvRes(peer_id) => {
                 IdentTopic::new(format!("direct:{}:{}", peer_id, INV_RES_TOPIC))
+            }
+            GossipTopic::ChainSyncReq => IdentTopic::new(format!("{}", CHAIN_SYNC_REQ_TOPIC)),
+            GossipTopic::ChainSyncRes(peer_id) => {
+                IdentTopic::new(format!("direct:{}:{}", peer_id, CHAIN_SYNC_RES_TOPIC))
             }
         }
     }

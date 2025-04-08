@@ -132,11 +132,11 @@ pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn 
         current_block = get_block(&current_block.prev_hash)
             .map_err(|e| {
                 format!(
-                    "[handlers::handle_print_blockchain] ERROR: Failed to fetch previous block {}",
+                    "[chain::get_blockchain_json] ERROR: Failed to fetch previous block {}",
                     e
                 )
             })?
-            .ok_or_else(|| "[block::get_last_block] ERROR: Last block not found")?;
+            .ok_or_else(|| "[chain::get_blockchain_json] ERROR: Last block not found")?;
     }
 
     Ok(blocks)

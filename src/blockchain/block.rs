@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     blockchain::{chain::get_last_block, transaction::mempool::mempool_contains_txo},
-    cli::db,
+    cli::db::{self, get_block},
     wallets::address::Address,
 };
 use hex;
@@ -169,4 +169,38 @@ fn get_target_difficulty() -> [u8; 32] {
 
     target[byte_index] = 1 << (7 - bit_index);
     target
+}
+
+pub fn get_blocks_since_height(height: u32) -> Result<Vec<Block>, Box<dyn Error>> {
+    let mut current_block = if let Ok(b) = get_last_block() {
+        b
+    } else {
+        return Err(
+            "[block::get_blocks_since_height] ERROR: Could not find blocks since last height"
+                .into(),
+        );
+    };
+
+    let mut res: Vec<Block> = Vec::new();
+    let mut block_height = current_block.height;
+    while height < block_height {
+        res.push(current_block.clone());
+
+        if current_block.is_genesis() {
+            break;
+        }
+
+        current_block = get_block(&current_block.prev_hash)
+            .map_err(|e| {
+                format!(
+                    "[block::get_blocks_since_height] ERROR: Failed to fetch previous block {}",
+                    e
+                )
+            })?
+            .ok_or_else(|| "[block::get_blocks_since_height] ERROR: Last block not found")?;
+
+        block_height = current_block.height;
+    }
+
+    Ok(res)
 }
