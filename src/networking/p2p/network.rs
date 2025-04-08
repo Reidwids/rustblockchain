@@ -566,5 +566,7 @@ fn get_all_topics(peer_id: &PeerId) -> Vec<IdentTopic> {
         GossipTopic::NewInv.to_ident_topic(),
         GossipTopic::InvReq(peer_id.clone()).to_ident_topic(),
         GossipTopic::InvRes(peer_id.clone()).to_ident_topic(),
+        GossipTopic::ChainSyncReq.to_ident_topic(),
+        GossipTopic::ChainSyncRes(peer_id.clone()).to_ident_topic(),
     ]
 }
