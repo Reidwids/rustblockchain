@@ -133,12 +133,16 @@ pub async fn start_p2p_network(
                             kad::Event::RoutingUpdated { peer, .. } => {
                                 println!("Kademlia routing updated for peer: {}", peer);
                                 // Bootstrap Kademlia on new connections
-                                    match swarm.behaviour_mut().kademlia.bootstrap() {
-                                        Ok(_) => {
-                                            println!("Bootstrapping Kademlia DHT...");
-                                        },
-                                        Err(e) => eprintln!("Failed to bootstrap Kademlia DHT: {}", e),
-                                    }
+                                match swarm.behaviour_mut().kademlia.bootstrap() {
+                                    Ok(_) => {
+                                        println!("Bootstrapped Kademlia DHT");
+                                    },
+                                    Err(e) => eprintln!("Failed to bootstrap Kademlia DHT: {}", e),
+                                }
+                                // Publish chainsync event
+                                if let Err(e) = swarm.behaviour_mut().publish_chainsync_req() {
+                                    eprintln!("Failed to broadcast inventory: {}", e);
+                                }
                             }
                             _ => {}
                         }
@@ -155,11 +159,6 @@ pub async fn start_p2p_network(
 
                         // Add connected peer to Kademlia routing table
                         swarm.behaviour_mut().kademlia.add_address(&peer_id, endpoint.get_remote_address().clone());
-
-                        // Publish chainsync event
-                        if let Err(e) = swarm.behaviour_mut().publish_chainsync_req() {
-                            eprintln!("Failed to broadcast inventory: {}", e);
-                        }
                     }
                     _ => {}
                 }
