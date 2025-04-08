@@ -13,13 +13,13 @@ use tokio::sync::mpsc;
 use crate::{
     blockchain::{
         block::{get_blocks_since_height, Block},
-        chain::{clear_blockchain, get_last_block},
+        chain::{clear_blockchain, get_chain_height, get_last_block},
         transaction::{
             mempool::{add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx},
             tx::Tx,
         },
     },
-    cli::db::utxo_set_contains_tx,
+    cli::db::{self, get_block, utxo_set_contains_tx},
     networking::node::Node,
 };
 
@@ -348,10 +348,35 @@ impl BlockchainBehaviour {
                             Ok(_)=> println!("Sending tx record to peer: {:?}", requesting_peer),
                         }
                     }
-                    NewInventory::Block(block_id) => {
+                    NewInventory::Block(block_hash) => {
                         // Recieving request for block.
                         // Send back to requester as inventory res
                         // If not there, do nothing
+                        let block = if let Ok(Some(b)) = get_block(&block_hash) {
+                            b
+                        } else {
+                            println!(
+                                "[network::handle_inventory_req] ERROR: block not found in local chain."
+                            );
+                            return;
+                        };
+                        let inventory = Inventory::Block(block);
+                        let serialized_block = if let Ok(bytes) = serde_json::to_vec(&inventory) {
+                            bytes
+                        } else {
+                            println!("[network::handle_inventory_req] ERROR: failed to serialize inventory");
+                            return;
+                        };
+                        match self.gossipsub.publish(
+                            GossipTopic::InvRes(requesting_peer).to_ident_topic(),
+                            serialized_block,
+                        ) {
+                            Err(e) => println!(
+                                "[network::handle_inventory_req] ERROR: Failed to publish inventory req: {:?}",
+                                e
+                            ),
+                            Ok(_)=> println!("Sending block record to peer: {:?}", requesting_peer),
+                        }
                     }
                 }
             }
@@ -375,6 +400,18 @@ impl BlockchainBehaviour {
                     }
                     Inventory::Block(block) => {
                         // Action on the received block - ex. remove txs from mempool
+                        // TODO: Validate block against blockchain
+                        // TODO: Remove txs from utxo set and mempool
+                        db::put_block(&block.hash, &block);
+                        let current_height = if let Ok(h) = get_chain_height() {
+                            h
+                        } else {
+                            // Chain is empty, therefore set curr height to 0
+                            0
+                        };
+                        if block.height >= current_height {
+                            db::put_last_hash(&block.hash);
+                        }
                     }
                 }
             }

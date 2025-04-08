@@ -51,6 +51,11 @@ pub fn get_last_block() -> Result<Block, Box<dyn Error>> {
     Ok(block)
 }
 
+pub fn get_chain_height() -> Result<u32, Box<dyn Error>> {
+    let lb = get_last_block()?;
+    Ok(lb.height)
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockJson {
     height: u32,
