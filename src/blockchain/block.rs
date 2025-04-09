@@ -183,7 +183,10 @@ pub fn get_blocks_since_height(height: u32) -> Result<Vec<Block>, Box<dyn Error>
 
     let mut res: Vec<Block> = Vec::new();
     let mut block_height = current_block.height;
-    while height < block_height {
+    // Trace back blocks until we reach the block height matching the height we have requested
+    // which would be the last height our requesting node has. If we are requesting with height 0,
+    // The genesis block is included in the request
+    while height < block_height || height == 0 {
         res.push(current_block.clone());
 
         if current_block.is_genesis() {

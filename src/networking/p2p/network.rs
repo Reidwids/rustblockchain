@@ -73,7 +73,7 @@ pub async fn start_p2p_network(
     for node_addr in bootstrap_nodes {
         match swarm.dial(node_addr.clone()) {
             Ok(_) => println!("Dialed bootstrap node: {}", node_addr),
-            Err(e) => eprintln!("Failed to dial bootstrap node {}: {}", node_addr, e),
+            Err(e) => println!("Failed to dial bootstrap node {}: {}", node_addr, e),
         }
     }
 
@@ -145,7 +145,7 @@ pub async fn start_p2p_network(
                                     Ok(_) => {
                                         println!("Bootstrapped Kademlia DHT");
                                     },
-                                    Err(e) => eprintln!("Failed to bootstrap Kademlia DHT: {}", e),
+                                    Err(e) => println!("Failed to bootstrap Kademlia DHT: {}", e),
                                 }
                             }
                             _ => {}
@@ -174,7 +174,7 @@ pub async fn start_p2p_network(
                     P2Prx::BroadcastNewInv(inv) => {
                         // Publish inventory to gossipsub topic (original functionality)
                         if let Err(e) = swarm.behaviour_mut().publish_new_inventory(&inv) {
-                            eprintln!("Failed to broadcast inventory: {}", e);
+                            println!("Failed to broadcast inventory: {}", e);
                         }
                     }
                     P2Prx::HealthCheck() => {
@@ -304,7 +304,7 @@ impl BlockchainBehaviour {
                 }
             }
             Err(e) => {
-                eprintln!("Failed to deserialize inventory data: {}", e);
+                println!("Failed to deserialize inventory data: {}", e);
             }
         }
     }
@@ -384,7 +384,7 @@ impl BlockchainBehaviour {
                 }
             }
             Err(e) => {
-                eprintln!("Failed to deserialize inventory data: {}", e);
+                println!("Failed to deserialize inventory data: {}", e);
             }
         }
     }
@@ -419,7 +419,7 @@ impl BlockchainBehaviour {
                 }
             }
             Err(e) => {
-                eprintln!("Failed to deserialize inventory data: {}", e);
+                println!("Failed to deserialize inventory data: {}", e);
             }
         }
     }
@@ -450,6 +450,7 @@ impl BlockchainBehaviour {
                 return;
             }
         };
+
         let block_hashes: Vec<[u8; 32]> = blocks.iter().map(|b| b.hash).collect();
         let payload = if let Ok(bytes) = serde_json::to_vec(&block_hashes) {
             bytes
@@ -504,13 +505,13 @@ impl BlockchainBehaviour {
                             e
                         ),
                         Ok(_)=> println!(
-                            "Tx not found in chain - requesting tx from sender...",
+                            "Requesting blocks from sender...",
                         ),
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Failed to deserialize blockhash data: {}", e);
+                println!("Failed to deserialize blockhash data: {}", e);
             }
         }
     }
