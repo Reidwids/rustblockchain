@@ -16,7 +16,10 @@ use sha2::{Digest, Sha256};
 
 use super::{
     merkle::MerkleTree,
-    transaction::tx::{coinbase_tx, Tx},
+    transaction::{
+        tx::{coinbase_tx, Tx},
+        utxo::update_utxos,
+    },
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -83,13 +86,6 @@ impl Block {
         for tx in &self.txs {
             tx.verify()
                 .map_err(|e| format!("[block::mine] ERROR: Cannot mine block - {:?}", e))?;
-
-            // Ensure no txs are double spent
-            for tx_input in &tx.inputs {
-                if mempool_contains_txo(tx_input.prev_tx_id, tx_input.out) {
-                    return Err("[block::mine] ERROR: tx contains outputs spent in mempool".into());
-                }
-            }
         }
         println!("Validation successful!");
         println!("Mining block:");

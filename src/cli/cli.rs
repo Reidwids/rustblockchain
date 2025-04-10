@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 use super::handlers::{
     handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_balance,
-    handle_get_node_id, handle_get_wallets, handle_mine, handle_print_blockchain, handle_send_tx,
+    handle_get_node_id, handle_get_wallets, handle_print_blockchain, handle_send_tx,
     handle_start_node,
 };
 
@@ -28,6 +28,10 @@ enum Commands {
         p2p_port: Option<u16>,
         #[arg(short = 'r', long = "rest_api_port")]
         rest_api_port: Option<u16>,
+        #[arg(short = 'a', long = "reward_addr")]
+        reward_addr: Option<String>,
+        #[arg(short = 'm', long = "mine")]
+        mine: bool,
     },
 
     /// Creates a new wallet
@@ -75,13 +79,6 @@ enum Commands {
         #[arg(short = 'm', long = "mine")]
         mine: bool,
     },
-
-    /// Mine the existing transactions in the mempool
-    #[command(about = "Mine the existing transactions in the mempool ")]
-    Mine {
-        #[arg(short = 'a', long = "reward_addr")]
-        reward_addr: Option<String>,
-    },
 }
 
 impl Cli {
@@ -93,7 +90,9 @@ impl Cli {
             Commands::StartNode {
                 rest_api_port,
                 p2p_port,
-            } => handle_start_node(rest_api_port, p2p_port).await,
+                reward_addr,
+                mine,
+            } => handle_start_node(rest_api_port, p2p_port, reward_addr, *mine).await,
             Commands::CreateWallet => handle_create_wallet(),
             Commands::GetWallets => handle_get_wallets(),
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),
@@ -106,7 +105,6 @@ impl Cli {
                 from,
                 mine,
             } => handle_send_tx(to, *value, from, *mine).await,
-            Commands::Mine { reward_addr } => handle_mine(reward_addr),
         }
     }
 }

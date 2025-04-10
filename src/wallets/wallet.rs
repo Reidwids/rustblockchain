@@ -13,7 +13,7 @@ use super::address::Address;
 
 const WALLET_PATH: &str = "./data/wallet_store.data";
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct Wallet {
     private_key: SecretKey,
     public_key: PublicKey,

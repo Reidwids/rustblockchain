@@ -1,18 +1,15 @@
-use std::collections::HashMap;
-
 use reqwest::Client;
 use tokio::sync::mpsc;
 
 use crate::{
     blockchain::{
-        block::Block,
         chain::{clear_blockchain, create_blockchain, get_blockchain_json},
         transaction::{
             tx::Tx,
-            utxo::{find_utxos_for_addr, reindex_utxos, update_utxos, UTXOSet},
+            utxo::{find_utxos_for_addr, reindex_utxos, UTXOSet},
         },
     },
-    cli::db,
+    mining::miner::start_miner,
     networking::{
         node::Node,
         p2p::network::start_p2p_network,
@@ -33,13 +30,23 @@ pub fn handle_get_node_id() {
     println!("Node ID: {}", node.get_peer_id());
 }
 
-pub async fn handle_start_node(rest_api_port: &Option<u16>, p2p_port: &Option<u16>) {
+pub async fn handle_start_node(
+    rest_api_port: &Option<u16>,
+    p2p_port: &Option<u16>,
+    reward_address: &Option<String>,
+    mine: bool,
+) {
     // Create a channel to pass messages from the server to the p2p network
     let (tx, rx) = mpsc::channel(32);
 
     // Spawn the P2P network task
     let p2p_port = p2p_port.unwrap_or(4001);
     tokio::spawn(start_p2p_network(rx, p2p_port));
+
+    // Start the miner if requested on startup
+    if mine {
+        tokio::spawn(start_miner(tx.clone(), reward_address.clone()));
+    }
 
     // Start the HTTP server
     start_rest_api(tx, *rest_api_port).await;
@@ -155,7 +162,7 @@ pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>, _: b
         value
     );
 
-    let mut utxos: UTXOSet = HashMap::new();
+    let utxos: UTXOSet;
 
     match client.get(url).send().await {
         Ok(response) => {
@@ -231,49 +238,4 @@ pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>, _: b
             println!("Error sending request: {:?}", e);
         }
     }
-
-    // if mine {
-    //     let mut new_block = Block::new(&from_wallet.get_wallet_address()).unwrap();
-    //     new_block.mine().unwrap();
-    //     update_utxos(&new_block).unwrap();
-    //     db::reset_mempool();
-    // }
-}
-
-pub fn handle_mine(reward_addr: &Option<String>) {
-    let wallet_store = WalletStore::init_wallet_store()
-        .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
-    let from_wallet: &Wallet;
-    match reward_addr {
-        Some(addr) => {
-            from_wallet = wallet_store.wallets.get(addr).expect(
-                "[handlers::handle_mine] ERROR: No local wallet found for given from address",
-            );
-        }
-        None => {
-            let first_wallet = wallet_store.wallets.iter().next();
-            println!("Wallet address not provided, using first local wallet");
-            match first_wallet {
-                Some((_, wallet)) => {
-                    from_wallet = wallet;
-                    println!(
-                        "First local wallet: {}",
-                        from_wallet.get_wallet_address().get_full_address()
-                    )
-                }
-                None => panic!("[handlers::handle_mine] ERROR: No local wallets found"),
-            }
-        }
-    }
-
-    let mempool = db::get_mempool();
-    if mempool.len() == 0 {
-        println!("No transactions to mine in mempool!");
-        return;
-    }
-
-    let mut new_block = Block::new(&from_wallet.get_wallet_address()).unwrap();
-    new_block.mine().unwrap();
-    update_utxos(&new_block).unwrap();
-    db::reset_mempool();
 }

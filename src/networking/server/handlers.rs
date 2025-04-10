@@ -188,10 +188,10 @@ pub async fn handle_send_tx(
     })))
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct ErrorResponse {
-    error: String,
-    code: u16,
+    pub error: String,
+    pub code: u16,
 }
 impl IntoResponse for ErrorResponse {
     fn into_response(self) -> Response {

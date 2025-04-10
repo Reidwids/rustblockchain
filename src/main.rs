@@ -31,6 +31,9 @@ mod cli {
     pub mod db;
     pub mod handlers;
 }
+mod mining {
+    pub mod miner;
+}
 
 #[tokio::main]
 async fn main() {
