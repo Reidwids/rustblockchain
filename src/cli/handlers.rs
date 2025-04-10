@@ -167,15 +167,28 @@ pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>, _: b
                         }
                         Err(e) => {
                             println!("Failed to convert UTXO JSON to UTXOSet: {:?}", e);
+                            return;
                         }
                     },
-                    Err(e) => println!("Failed to parse UTXO response: {:?}", e),
+                    Err(e) => {
+                        println!("Failed to parse UTXO response: {:?}", e);
+                        return;
+                    }
                 }
             } else {
-                println!("Request failed with status: {}", response.status());
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                println!(
+                    "Failed to fetch UTXOs from node: {} - {}",
+                    status, error_text
+                );
+                return;
             }
         }
-        Err(e) => println!("Failed to connect to node: {:?}", e),
+        Err(e) => {
+            println!("Failed to connect to node: {:?}", e);
+            return;
+        }
     }
 
     let to_address = match Address::new_from_str(to.as_str()) {
@@ -207,9 +220,11 @@ pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>, _: b
     match client.post(&url).json(&tx_json).send().await {
         Ok(resp) => {
             if resp.status().is_success() {
-                println!("Transaction sent successfully");
+                println!("Transaction successfully sent to node");
             } else {
-                println!("Failed to send transaction: {}", resp.status());
+                let status = resp.status();
+                let error_text = resp.text().await.unwrap_or_default();
+                println!("Failed to send transaction: {} - {}", status, error_text);
             }
         }
         Err(e) => {
