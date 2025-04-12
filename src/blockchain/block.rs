@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    blockchain::{chain::get_last_block, transaction::mempool::mempool_contains_txo},
+    blockchain::chain::get_last_block,
     cli::db::{self, get_block},
     wallets::address::Address,
 };
@@ -16,10 +16,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     merkle::MerkleTree,
-    transaction::{
-        tx::{coinbase_tx, Tx},
-        utxo::update_utxos,
-    },
+    transaction::tx::{coinbase_tx, Tx, COINBASE_REWARD},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -149,6 +146,34 @@ impl Block {
         let tree = MerkleTree::new(tx_hashes);
 
         Ok(tree.root.hash)
+    }
+
+    pub fn verify(&self) -> Result<bool, Box<dyn Error>> {
+        if self.txs.is_empty() {
+            return Ok(false);
+        }
+
+        // Verify txs
+        for tx in &self.txs {
+            if !tx.verify()? {
+                return Ok(false);
+            }
+        }
+
+        // Verify coinbase tx
+        let coinbase = &self.txs[0];
+        if !coinbase.is_coinbase() || coinbase.outputs[0].value != COINBASE_REWARD {
+            return Ok(false);
+        }
+
+        // Verify PoW
+        let target = get_target_difficulty();
+        let hash = self.hash()?;
+        if hash >= target || hash != self.hash {
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }
 

@@ -204,6 +204,21 @@ pub fn put_mempool(tx: &Tx) {
         .expect("[db::put_mempool] ERROR: Failed to write to DB");
 }
 
+pub fn remove_txs_from_mempool(tx_ids: Vec<[u8; 32]>) {
+    let mut mempool = get_mempool();
+
+    for tx_id in tx_ids {
+        mempool.remove(&tx_id);
+    }
+
+    let serialized =
+        bincode::serialize(&mempool).expect("[db::put_mempool] ERROR: Failed to serialize mempool");
+
+    ROCKS_DB
+        .put(MEMPOOL_KEY, serialized)
+        .expect("[db::put_mempool] ERROR: Failed to write to DB");
+}
+
 /// Delete all mempool entries by deleting the mempool key
 pub fn reset_mempool() {
     // Delete the mempool key, effectively resetting the entire mempool. No error on failure

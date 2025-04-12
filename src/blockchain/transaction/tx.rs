@@ -12,7 +12,7 @@ use crate::wallets::wallet::Wallet;
 use super::utxo::UTXOSet;
 
 /** Constants **/
-const COINBASE_REWARD: u32 = 100;
+pub const COINBASE_REWARD: u32 = 100;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Tx {

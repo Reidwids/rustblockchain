@@ -1,4 +1,7 @@
-use crate::cli::db::{self, get_mempool};
+use crate::{
+    blockchain::block::Block,
+    cli::db::{self, get_mempool},
+};
 
 use super::tx::Tx;
 use std::{collections::HashMap, error::Error};
@@ -43,5 +46,33 @@ pub fn add_tx_to_mempool(tx: &Tx) -> Result<(), Box<dyn Error>> {
     }
 
     db::put_mempool(&tx);
+    Ok(())
+}
+
+/// Update mempool with a new block
+pub fn update_mempool(block: &Block) -> Result<(), Box<dyn Error>> {
+    let mempool = get_mempool();
+
+    // Use mempool id/out hashmap for faster lookup
+    let mut input_map: HashMap<([u8; 32], u32), [u8; 32]> = HashMap::new();
+    for (mem_tx_id, mem_tx) in &mempool {
+        for input in &mem_tx.inputs {
+            input_map.insert((input.prev_tx_id, input.out), *mem_tx_id);
+        }
+    }
+
+    // Track all mempool txs that got spent in the block
+    let mut tx_ids_to_remove = Vec::new();
+    for block_tx in &block.txs {
+        if !block_tx.is_coinbase() {
+            for input in &block_tx.inputs {
+                if let Some(mem_tx_id) = input_map.get(&(input.prev_tx_id, input.out)) {
+                    tx_ids_to_remove.push(*mem_tx_id);
+                }
+            }
+        }
+    }
+
+    db::remove_txs_from_mempool(tx_ids_to_remove);
     Ok(())
 }

@@ -15,8 +15,12 @@ use crate::{
         block::{get_blocks_since_height, Block},
         chain::{clear_blockchain, get_chain_height, get_last_block},
         transaction::{
-            mempool::{add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx},
+            mempool::{
+                add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx, mempool_contains_txo,
+                update_mempool,
+            },
             tx::Tx,
+            utxo::update_utxos,
         },
     },
     cli::db::{self, get_block, utxo_set_contains_tx},
@@ -395,7 +399,29 @@ impl BlockchainBehaviour {
             Ok(inv) => {
                 match inv {
                     Inventory::Transaction(tx) => {
-                        // TODO: Validate tx against blockchain
+                        match tx.verify() {
+                            Ok(v) => {
+                                if !v {
+                                    println!(
+                                        "[network::handle_inventory_res] ERROR: Transaction verification failed!"
+                                    );
+                                    return;
+                                }
+                            }
+                            Err(e) => {
+                                println!("[network::handle_inventory_res] ERROR: Cannot mine block - {:?}", e);
+                                return;
+                            }
+                        };
+
+                        // Ensure no txs are double spent
+                        for tx_input in &tx.inputs {
+                            if !mempool_contains_txo(tx_input.prev_tx_id, tx_input.out) {
+                                println!("[network::handle_inventory_res] ERROR: tx contains outputs spent in mempool");
+                                return;
+                            }
+                        }
+
                         match add_tx_to_mempool(&tx) {
                             Err(e) => println!("[network::handle_inventory_res] ERROR: failed to add transaction to mempool: {:?}", e),
                             Ok(_)=>println!("Tx was successfully committed to the mempool")
@@ -403,8 +429,35 @@ impl BlockchainBehaviour {
                     }
                     Inventory::Block(block) => {
                         // Action on the received block - ex. remove txs from mempool
-                        // TODO: Validate block against blockchain
-                        // TODO: Remove txs from utxo set and mempool
+                        match block.verify() {
+                            Ok(v) => {
+                                if !v {
+                                    println!("Verification failed for received block!")
+                                }
+                            }
+                            Err(e) => {
+                                println!("[network::handle_inventory_res] ERROR: failed to verify block: {:?}", e);
+                                return;
+                            }
+                        }
+
+                        // TODO: Should send a signal to cancel mining
+                        if let Err(e) = update_utxos(&block) {
+                            println!(
+                                "[miner::handle_mine] ERROR: Failed to update utxos: {:?}",
+                                e
+                            );
+                            return;
+                        };
+
+                        if let Err(e) = update_mempool(&block) {
+                            println!(
+                                "[miner::handle_mine] ERROR: Failed to update mempool: {:?}",
+                                e
+                            );
+                            return;
+                        };
+
                         db::put_block(&block.hash, &block);
                         let current_height = if let Ok(h) = get_chain_height() {
                             h
@@ -415,6 +468,7 @@ impl BlockchainBehaviour {
                         if block.height >= current_height {
                             db::put_last_hash(&block.hash);
                         }
+                        println!("Block was successfully committed to the blockchain")
                     }
                 }
             }
