@@ -208,20 +208,18 @@ pub fn reindex_utxos() -> Result<(), Box<dyn Error>> {
 pub fn update_utxos(block: &Block) -> Result<(), Box<dyn Error>> {
     for tx in &block.txs {
         if !tx.is_coinbase() {
-            // Loop through tx in's in new block to check if they're spent
             for tx_in in &tx.inputs {
-                // Fetch existing utxos and update by removing any outputs now spent by
-                // a given tx in
+                // Remove any outputs now spent by a given tx input
                 db::delete_utxo(&tx_in.prev_tx_id, tx_in.out)?;
             }
+        }
 
-            // Add the new outputs as utxos for future txs
-            for (out_idx, tx_out) in tx.outputs.iter().enumerate() {
-                let out_idx = out_idx
-                    .try_into()
-                    .expect("[utxo::update_utxos] ERROR: Index too large for u32");
-                db::put_utxo(&tx.id, out_idx, tx_out)?;
-            }
+        // Add the new outputs as utxos for future txs
+        for (out_idx, tx_out) in tx.outputs.iter().enumerate() {
+            let out_idx = out_idx
+                .try_into()
+                .expect("[utxo::update_utxos] ERROR: Index too large for u32");
+            db::put_utxo(&tx.id, out_idx, tx_out)?;
         }
     }
     Ok(())
