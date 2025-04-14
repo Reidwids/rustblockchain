@@ -106,8 +106,11 @@ impl Tx {
             let mut tx_copy = self.trimmed_copy();
 
             // Verify that the prev output pub key hash matches the pub key of the input
-            let prev_tx_out = get_utxo(&input.prev_tx_id, input.out)?
-                .ok_or_else(|| format!("[Tx::verify] ERROR: Previous tx missing"))?;
+            let prev_tx_out = if let Some(tx) = get_utxo(&input.prev_tx_id, input.out)? {
+                tx
+            } else {
+                return Ok(false);
+            };
 
             // Recompute the pub key hash from the input's public key
             let computed_pub_key_hash = hash_pub_key(&input.pub_key);
