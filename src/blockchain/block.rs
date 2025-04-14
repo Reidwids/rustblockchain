@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     error::Error,
     io::Write,
     time::{SystemTime, UNIX_EPOCH},
@@ -18,6 +19,8 @@ use super::{
     merkle::MerkleTree,
     transaction::tx::{coinbase_tx, Tx, COINBASE_REWARD},
 };
+
+pub type OrphanBlocks = HashMap<[u8; 32], Block>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Block {
@@ -174,6 +177,29 @@ impl Block {
         }
 
         Ok(true)
+    }
+
+    /// Verifies a block without checking tx validity. Txs will be checked
+    /// if/when the orphan is added to the chain.
+    pub fn verify_orphan(&self) -> Result<bool, Box<dyn Error>> {
+        if self.txs.is_empty() {
+            return Ok(false);
+        }
+
+        // Verify coinbase tx
+        let coinbase = &self.txs[0];
+        if !coinbase.is_coinbase() || coinbase.outputs[0].value != COINBASE_REWARD {
+            return Ok(false);
+        }
+
+        // Verify PoW
+        let target = get_target_difficulty();
+        let hash = self.hash()?;
+        if hash >= target || hash != self.hash {
+            return Ok(false);
+        }
+
+        return Ok(true);
     }
 }
 

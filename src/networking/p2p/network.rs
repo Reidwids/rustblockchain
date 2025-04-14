@@ -4,7 +4,7 @@ use libp2p::{
     kad::{self, store::MemoryStore},
     noise,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
+    tcp, yamux, Multiaddr, PeerId, SwarmBuilder,
 };
 use serde::{Deserialize, Serialize};
 use std::{error::Error, str::FromStr};
@@ -13,17 +13,15 @@ use tokio::sync::mpsc;
 use crate::{
     blockchain::{
         block::{get_blocks_since_height, Block},
-        chain::{clear_blockchain, get_chain_height, get_last_block},
+        chain::{clear_blockchain, get_last_block},
         transaction::{
             mempool::{
                 add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx, mempool_contains_txo,
-                update_mempool,
             },
             tx::Tx,
-            utxo::update_utxos,
         },
     },
-    cli::db::{self, get_block, utxo_set_contains_tx},
+    cli::db::{commit_block, get_block, utxo_set_contains_tx},
     networking::node::Node,
 };
 
@@ -304,6 +302,7 @@ impl BlockchainBehaviour {
                     NewInventory::Block(block_hash) => {
                         // Check if we have the block
                         // If not, request block from sender
+                        // TODO: Next
                     }
                 }
             }
@@ -429,46 +428,10 @@ impl BlockchainBehaviour {
                     }
                     Inventory::Block(block) => {
                         // Action on the received block - ex. remove txs from mempool
-                        match block.verify() {
-                            Ok(v) => {
-                                if !v {
-                                    println!("Verification failed for received block!")
-                                }
-                            }
-                            Err(e) => {
-                                println!("[network::handle_inventory_res] ERROR: failed to verify block: {:?}", e);
-                                return;
-                            }
+                        match commit_block(&block) {
+                            Ok(_)=>{}
+                            Err(e) => println!("[network::handle_inventory_res] ERROR: failed to commit block: {:?}", e),
                         }
-
-                        // TODO: Should send a signal to cancel mining
-                        if let Err(e) = update_utxos(&block) {
-                            println!(
-                                "[miner::handle_mine] ERROR: Failed to update utxos: {:?}",
-                                e
-                            );
-                            return;
-                        };
-
-                        if let Err(e) = update_mempool(&block) {
-                            println!(
-                                "[miner::handle_mine] ERROR: Failed to update mempool: {:?}",
-                                e
-                            );
-                            return;
-                        };
-
-                        db::put_block(&block.hash, &block);
-                        let current_height = if let Ok(h) = get_chain_height() {
-                            h
-                        } else {
-                            // Chain is empty, therefore set curr height to 0
-                            0
-                        };
-                        if block.height >= current_height {
-                            db::put_last_hash(&block.hash);
-                        }
-                        println!("Block was successfully committed to the blockchain")
                     }
                 }
             }

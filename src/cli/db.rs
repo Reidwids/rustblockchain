@@ -4,17 +4,21 @@ use once_cell::sync::Lazy;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, DB};
 
 use crate::blockchain::{
-    block::Block,
+    block::{Block, OrphanBlocks},
+    chain::get_chain_height,
     transaction::{
-        mempool::Mempool,
+        mempool::{update_mempool, Mempool},
         tx::{Tx, TxOutput},
-        utxo::TxOutMap,
+        utxo::{update_utxos, TxOutMap},
     },
 };
 
+/// LAST_HASH_KEY holds the key to discover the last block hash
 pub const LAST_HASH_KEY: &str = "lh";
+/// MEMPOOL_KEY holds the key to retrieve the mempool
 const MEMPOOL_KEY: &str = "mempool";
-// const PEERS_KEY: &str = "peers";
+/// Orphan key is used to retrieve the orphaned block set
+const ORPHAN_KEY: &str = "orphan";
 
 const UTXO_CF: &str = "utxo";
 const BLOCK_CF: &str = "block";
@@ -216,13 +220,134 @@ pub fn remove_txs_from_mempool(tx_ids: Vec<[u8; 32]>) {
 
     ROCKS_DB
         .put(MEMPOOL_KEY, serialized)
-        .expect("[db::put_mempool] ERROR: Failed to write to DB");
+        .expect("[db::remove_txs_from_mempool] ERROR: Failed to write to DB");
 }
 
 /// Delete all mempool entries by deleting the mempool key
 pub fn reset_mempool() {
     // Delete the mempool key, effectively resetting the entire mempool. No error on failure
     let _ = ROCKS_DB.delete(MEMPOOL_KEY);
+}
+
+/*** Orphan DB handlers ***/
+pub fn get_orphaned_blocks() -> OrphanBlocks {
+    let block_data = ROCKS_DB.get(ORPHAN_KEY.as_bytes()).unwrap();
+    block_data
+        .and_then(|data| bincode::deserialize(&data).ok()) // Try to deserialize
+        .unwrap_or_else(HashMap::new)
+}
+
+pub fn put_orphan_block(block: &Block) {
+    // TODO: Put cap on map size, use LRU evictions
+    let mut block_map = get_orphaned_blocks();
+
+    // Insert each output of the transaction into the mempool UTXOSet
+    block_map.insert(block.hash, block.clone());
+
+    let serialized = bincode::serialize(&block_map)
+        .expect("[db::put_orphan_block] ERROR: Failed to serialize orphan blocks");
+
+    ROCKS_DB
+        .put(ORPHAN_KEY, serialized)
+        .expect("[db::put_orphan_block] ERROR: Failed to write to DB");
+}
+
+pub fn remove_from_orphan_blocks(block_hashes: Vec<[u8; 32]>) {
+    let mut block_map = get_orphaned_blocks();
+
+    for hash in block_hashes {
+        block_map.remove(&hash);
+    }
+
+    let serialized = bincode::serialize(&block_map)
+        .expect("[db::remove_from_orphan_blocks] ERROR: Failed to serialize mempool");
+
+    ROCKS_DB
+        .put(ORPHAN_KEY, serialized)
+        .expect("[db::remove_blocks_from_orphan_blocks] ERROR: Failed to write to DB");
+}
+
+pub fn check_for_valid_orphan_blocks() -> Result<(), Box<dyn Error>> {
+    let block_map = get_orphaned_blocks();
+    let last_hash = get_last_hash()?;
+    for (_, block) in block_map.iter() {
+        if block.prev_hash == last_hash {
+            commit_block(&block.clone())?;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn commit_block(block: &Block) -> Result<(), Box<dyn Error>> {
+    match block.verify() {
+        Ok(v) => {
+            if !v {
+                println!("Verification failed for given block!");
+                println!("Checking if block is a valid orphan block...");
+                match block.verify_orphan() {
+                    Ok(v) => {
+                        if !v {
+                            println!("Block is not a valid orphan block and will be discarded");
+                            return Ok(());
+                        }
+                        put_orphan_block(&block);
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        return Err(format!(
+                            "[network::handle_inventory_res] ERROR: failed to verify block: {:?}",
+                            e
+                        )
+                        .into());
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            return Err(format!(
+                "[network::handle_inventory_res] ERROR: failed to verify block: {:?}",
+                e
+            )
+            .into());
+        }
+    }
+
+    // TODO: Should send a signal to cancel mining
+    if let Err(e) = update_utxos(&block) {
+        return Err(format!(
+            "[miner::handle_mine] ERROR: Failed to update utxos: {:?}",
+            e
+        )
+        .into());
+    };
+
+    if let Err(e) = update_mempool(&block) {
+        return Err(format!(
+            "[miner::handle_mine] ERROR: Failed to update mempool: {:?}",
+            e
+        )
+        .into());
+    };
+
+    put_block(&block.hash, &block);
+    remove_from_orphan_blocks(vec![block.hash]);
+
+    let current_height = if let Ok(h) = get_chain_height() {
+        h
+    } else {
+        // Chain is empty, therefore set curr height to 0
+        0
+    };
+    if block.height >= current_height {
+        put_last_hash(&block.hash);
+    }
+
+    // Check if new block allows orphaned blocks to be committed
+    check_for_valid_orphan_blocks()?;
+
+    println!("Block was successfully committed to the blockchain");
+    Ok(())
 }
 
 // /*** Peer handlers ***/
