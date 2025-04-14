@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     blockchain::chain::get_last_block,
-    cli::db::{self, get_block},
+    cli::db::{self, get_block, get_last_hash},
     wallets::address::Address,
 };
 use hex;
@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::{
+    chain::get_chain_height,
     merkle::MerkleTree,
     transaction::tx::{coinbase_tx, Tx, COINBASE_REWARD},
 };
@@ -176,7 +177,22 @@ impl Block {
             return Ok(false);
         }
 
-        Ok(true)
+        // Ensure this block is a continuation of the chain
+        match get_last_hash() {
+            Ok(lh) => {
+                if lh != self.prev_hash {
+                    return Ok(false);
+                }
+            }
+            Err(e) => {
+                if !self.is_genesis() {
+                    return Err(
+                        format!("[block::verify] ERROR: Failed to verify block {}", e).into(),
+                    );
+                }
+            }
+        };
+        return Ok(true);
     }
 
     /// Verifies a block without checking tx validity. Txs will be checked
@@ -197,6 +213,13 @@ impl Block {
         let hash = self.hash()?;
         if hash >= target || hash != self.hash {
             return Ok(false);
+        }
+
+        // Ensure this block is not from an invalid height
+        if let Ok(h) = get_chain_height() {
+            if self.height <= h {
+                return Ok(false);
+            }
         }
 
         return Ok(true);
