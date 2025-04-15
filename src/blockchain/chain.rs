@@ -4,7 +4,10 @@ use std::error::Error;
 
 use super::block::Block;
 use crate::{
-    cli::db::{self, blockchain_exists, get_block, get_last_hash, ROCKS_DB},
+    cli::db::{
+        self, blockchain_exists, delete_all_blocks, delete_all_orphan_blocks, delete_all_utxos,
+        delete_last_hash, delete_mempool, get_block, get_last_hash, ROCKS_DB,
+    },
     networking::node::NODE_KEY,
     wallets::address::Address,
 };
@@ -23,18 +26,11 @@ pub fn create_blockchain(addr: &Address) -> Result<(), Box<dyn Error>> {
 
 /// Clears the existing chain. Retains the node id
 pub fn clear_blockchain() {
-    let mut batch = rocksdb::WriteBatch::default();
-
-    for item in ROCKS_DB.iterator(IteratorMode::Start).flatten() {
-        let (key, _) = item;
-        if key.as_ref() != NODE_KEY.as_bytes() {
-            batch.delete(key.as_ref()); // Convert Box<[u8]> to &[u8]
-        }
-    }
-
-    ROCKS_DB
-        .write(batch)
-        .expect("[chain::clear_blockchain] ERROR: Failed to delete blockchain");
+    delete_all_blocks();
+    delete_all_utxos();
+    delete_all_orphan_blocks();
+    delete_mempool();
+    delete_last_hash();
 }
 
 pub fn get_last_block() -> Result<Block, Box<dyn Error>> {

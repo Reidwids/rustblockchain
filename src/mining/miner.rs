@@ -97,7 +97,7 @@ pub async fn handle_mine(p2p: Sender<P2Prx>, reward_wallet: Wallet) {
         );
         return;
     };
-    db::reset_mempool();
+    db::delete_mempool();
 
     if let Err(e) = p2p
         .send(P2Prx::BroadcastNewInv(NewInventory::Block(new_block.hash)))

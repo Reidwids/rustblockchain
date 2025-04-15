@@ -124,6 +124,10 @@ pub fn delete_utxo(tx_id: &[u8; 32], out_idx: u32) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
+pub fn delete_all_utxos() {
+    let _ = ROCKS_DB.delete_range_cf(utxo_cf(), b"", b"");
+}
+
 /*** Block DB handlers ***/
 
 pub fn block_cf() -> &'static ColumnFamily {
@@ -156,6 +160,10 @@ pub fn put_block(block_hash: &[u8; 32], block_data: &Block) {
         .expect("[db::put_block] ERROR: Failed to write to DB");
 }
 
+pub fn delete_all_blocks() {
+    let _ = ROCKS_DB.delete_range_cf(block_cf(), b"", b"");
+}
+
 /*** Last Hash DB handlers ***/
 
 pub fn blockchain_exists() -> bool {
@@ -184,6 +192,10 @@ pub fn put_last_hash(last_hash: &[u8; 32]) {
     ROCKS_DB
         .put(LAST_HASH_KEY, last_hash)
         .expect("[db::put_last_hash] ERROR: Failed to write to DB");
+}
+
+pub fn delete_last_hash() {
+    let _ = ROCKS_DB.delete(LAST_HASH_KEY);
 }
 
 /*** Mempool DB handlers ***/
@@ -224,7 +236,7 @@ pub fn remove_txs_from_mempool(tx_ids: Vec<[u8; 32]>) {
 }
 
 /// Delete all mempool entries by deleting the mempool key
-pub fn reset_mempool() {
+pub fn delete_mempool() {
     // Delete the mempool key, effectively resetting the entire mempool. No error on failure
     let _ = ROCKS_DB.delete(MEMPOOL_KEY);
 }
@@ -279,6 +291,11 @@ pub fn check_for_valid_orphan_blocks() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+pub fn delete_all_orphan_blocks() {
+    // Delete the mempool key, effectively resetting the entire mempool. No error on failure
+    let _ = ROCKS_DB.delete(ORPHAN_KEY);
+}
+
 pub fn commit_block(block: &Block) -> Result<(), Box<dyn Error>> {
     match block.verify() {
         Ok(v) => {
@@ -292,14 +309,13 @@ pub fn commit_block(block: &Block) -> Result<(), Box<dyn Error>> {
                             return Ok(());
                         }
                         put_orphan_block(&block);
+                        println!("Block is a valid orphan and has been persisted for future consideration");
                         return Ok(());
                     }
                     Err(e) => {
-                        return Err(format!(
-                            "[network::handle_inventory_res] ERROR: failed to verify block: {:?}",
-                            e
-                        )
-                        .into());
+                        return Err(
+                            format!("[network::handle_inventory_res] ERROR: {:?}", e).into()
+                        );
                     }
                 }
             }
@@ -349,30 +365,3 @@ pub fn commit_block(block: &Block) -> Result<(), Box<dyn Error>> {
     println!("Block was successfully committed to the blockchain");
     Ok(())
 }
-
-// /*** Peer handlers ***/
-// pub fn get_peers() -> PeerCollection {
-//     let peers_data = ROCKS_DB.get(PEERS_KEY.as_bytes()).unwrap();
-//     peers_data
-//         .and_then(|data| bincode::deserialize::<PeerCollection>(&data).ok())
-//         .unwrap_or_else(PeerCollection::new)
-// }
-
-// pub fn put_peer(peer_id: PeerId, addr: libp2p::Multiaddr) {
-//     let mut peers = get_peers();
-
-//     if !peers.get(&peer_id).unwrap_or(&vec![]).contains(&addr) {
-//         peers
-//             .entry(peer_id)
-//             // If the entry doesn't exist, create a new Vec<Multiaddr>
-//             .or_insert_with(Vec::new)
-//             .push(addr); // Add the new address to the vector
-//     }
-
-//     ROCKS_DB
-//         .put(
-//             PEERS_KEY,
-//             bincode::serialize(&peers).expect("[db::put_peer] ERROR: Failed to serialize peers"),
-//         )
-//         .expect("[db::put_peer] ERROR: Failed to write to DB");
-// }
