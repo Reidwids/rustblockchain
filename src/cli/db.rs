@@ -284,6 +284,7 @@ pub fn check_for_valid_orphan_blocks() -> Result<(), Box<dyn Error>> {
     let last_hash = get_last_hash()?;
     for (_, block) in block_map.iter() {
         if block.prev_hash == last_hash {
+            println!("Valid orphan block found! Attempting to commit...");
             commit_block(&block.clone())?;
         }
     }
