@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error};
 use rocksdb::IteratorMode;
 
 use crate::{
-    blockchain::block::Block,
+    blockchain::blocks::block::Block,
     cli::db::{self, utxo_cf, ROCKS_DB},
 };
 

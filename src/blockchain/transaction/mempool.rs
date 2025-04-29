@@ -1,5 +1,5 @@
 use crate::{
-    blockchain::block::Block,
+    blockchain::blocks::block::Block,
     cli::db::{self, get_mempool},
 };
 

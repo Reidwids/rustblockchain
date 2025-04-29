@@ -1,14 +1,17 @@
-use rocksdb::IteratorMode;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
-use super::block::Block;
+use super::{blocks::block::Block, transaction::tx::Tx};
 use crate::{
+    blockchain::{
+        blocks::orphan::{check_for_valid_orphan_blocks, check_orphans_for_longest_chain},
+        transaction::{mempool::update_mempool, utxo::update_utxos},
+    },
     cli::db::{
         self, blockchain_exists, delete_all_blocks, delete_all_orphan_blocks, delete_all_utxos,
-        delete_last_hash, delete_mempool, get_block, get_last_hash, ROCKS_DB,
+        delete_last_hash, delete_mempool, get_block, get_last_hash, put_block, put_last_hash,
+        put_orphan_block, remove_from_orphan_blocks,
     },
-    networking::node::NODE_KEY,
     wallets::address::Address,
 };
 use hex;
@@ -141,4 +144,106 @@ pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn 
     }
 
     Ok(blocks)
+}
+
+pub fn get_tx_from_chain(tx_id: [u8; 32]) -> Result<Tx, Box<dyn Error>> {
+    let last_hash = db::get_last_hash()?;
+    let mut current_block = db::get_block(&last_hash)?.ok_or_else(|| {
+        format!(
+            "[chain::find_tx_in_chain] ERROR: Could not find block from last hash {:?}",
+            last_hash
+        )
+    })?;
+
+    loop {
+        for tx in &current_block.txs {
+            if tx.id == tx_id {
+                return Ok(tx.clone());
+            }
+        }
+        // Break if we have reached the first block
+        if current_block.is_genesis() {
+            break;
+        }
+        // Otherwise, get the next block
+        current_block = db::get_block(&current_block.prev_hash)?.ok_or_else(|| {
+            format!(
+                "[chain::find_tx_in_chain] ERROR: Could not find next block {:?}",
+                current_block.prev_hash
+            )
+        })?;
+    }
+
+    Err("[chain::find_tx_in_chain] ERROR: Could not find tx in chain".into())
+}
+
+pub fn commit_block(block: &Block) -> Result<(), Box<dyn Error>> {
+    match block.verify() {
+        Ok(v) => {
+            if !v {
+                println!("Verification failed for given block!");
+                println!("Checking if block is a valid orphan block...");
+                match block.verify_orphan() {
+                    Ok(v) => {
+                        if !v {
+                            println!("Block is not a valid orphan block and will be discarded");
+                            return Ok(());
+                        }
+                        put_orphan_block(&block);
+                        println!("Block is a valid orphan and has been persisted for future consideration");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        return Err(
+                            format!("[network::handle_inventory_res] ERROR: {:?}", e).into()
+                        );
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            return Err(format!(
+                "[network::handle_inventory_res] ERROR: failed to verify block: {:?}",
+                e
+            )
+            .into());
+        }
+    }
+
+    // TODO: Should send a signal to cancel mining
+    if let Err(e) = update_utxos(&block) {
+        return Err(format!(
+            "[miner::handle_mine] ERROR: Failed to update utxos: {:?}",
+            e
+        )
+        .into());
+    };
+
+    if let Err(e) = update_mempool(&block) {
+        return Err(format!(
+            "[miner::handle_mine] ERROR: Failed to update mempool: {:?}",
+            e
+        )
+        .into());
+    };
+
+    put_block(&block.hash, &block);
+    remove_from_orphan_blocks(vec![block.hash]);
+
+    let current_height = if let Ok(h) = get_chain_height() {
+        h
+    } else {
+        // Chain is empty, therefore set curr height to 0
+        0
+    };
+    if block.height >= current_height {
+        put_last_hash(&block.hash);
+    }
+
+    // Check if new block allows other orphaned blocks to be committed
+    check_for_valid_orphan_blocks()?;
+    check_orphans_for_longest_chain()?;
+
+    println!("Block was successfully committed to the blockchain");
+    Ok(())
 }

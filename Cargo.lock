@@ -959,6 +959,7 @@ dependencies = [
  "bincode",
  "clap",
  "hex",
+ "lazy_static",
  "libp2p",
  "once_cell",
  "reqwest",

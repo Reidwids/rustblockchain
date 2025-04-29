@@ -12,8 +12,8 @@ use tokio::sync::mpsc;
 
 use crate::{
     blockchain::{
-        block::{get_blocks_since_height, Block},
-        chain::{clear_blockchain, get_last_block},
+        blocks::block::{get_blocks_since_height, Block},
+        chain::{clear_blockchain, commit_block, get_last_block},
         transaction::{
             mempool::{
                 add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx, mempool_contains_txo,
@@ -21,7 +21,7 @@ use crate::{
             tx::Tx,
         },
     },
-    cli::db::{commit_block, get_block, utxo_set_contains_tx},
+    cli::db::{get_block, utxo_set_contains_tx},
     networking::node::Node,
 };
 
@@ -426,13 +426,13 @@ impl BlockchainBehaviour {
                             Ok(_)=>println!("Tx was successfully committed to the mempool")
                         }
                     }
-                    Inventory::Block(block) => {
-                        // Action on the received block - ex. remove txs from mempool
-                        match commit_block(&block) {
-                            Ok(_)=>{}
-                            Err(e) => println!("[network::handle_inventory_res] ERROR: failed to commit block: {:?}", e),
-                        }
-                    }
+                    Inventory::Block(block) => match commit_block(&block) {
+                        Ok(_) => {}
+                        Err(e) => println!(
+                            "[network::handle_inventory_res] ERROR: failed to commit block: {:?}",
+                            e
+                        ),
+                    },
                 }
             }
             Err(e) => {

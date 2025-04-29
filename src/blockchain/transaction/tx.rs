@@ -189,7 +189,7 @@ impl Tx {
 
 /** Inputs and Outputs **/
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct TxOutput {
     pub value: u32, // Value of output tokens in the tx. Outputs cannot be split
     pub pub_key_hash: [u8; 20], // Recipient pub key (Sha256 + Ripemd160). Locks the output so it can only be included in a future input by the output author.
@@ -202,12 +202,16 @@ impl TxOutput {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct TxInput {
-    pub prev_tx_id: [u8; 32], // ID of the transaction the output is inside of
-    pub out: u32,             // Index that the output appears within the referenced transaction
-    pub signature: Signature, // Signature created with the senders priv_key proving that they can spend the prev transaction output.
-    pub pub_key: PublicKey, // The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
+    /// ID of the transaction the output is inside of
+    pub prev_tx_id: [u8; 32],
+    /// Index that the output appears within the referenced transaction
+    pub out: u32,
+    /// Signature created with the senders priv_key proving that they can spend the prev transaction output.
+    pub signature: Signature,
+    /// The spender's public key - used to verify the signature against the pubkeyhash of the last transaction
+    pub pub_key: PublicKey,
 }
 impl TxInput {
     pub fn new(prev_tx_id: [u8; 32], out: u32, signature: Signature, pub_key: PublicKey) -> Self {

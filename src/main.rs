@@ -1,7 +1,10 @@
 use cli::cli::Cli;
 
 mod blockchain {
-    pub mod block;
+    pub mod blocks {
+        pub mod block;
+        pub mod orphan;
+    }
     pub mod merkle;
     pub mod transaction {
         pub mod mempool;

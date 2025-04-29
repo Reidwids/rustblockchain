@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    blockchain::{block::Block, transaction::utxo::update_utxos},
+    blockchain::{blocks::block::Block, transaction::utxo::update_utxos},
     cli::db,
     networking::p2p::network::{NewInventory, P2Prx},
     wallets::wallet::{Wallet, WalletStore},

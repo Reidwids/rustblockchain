@@ -7,19 +7,17 @@ use std::{
 };
 
 use crate::{
-    blockchain::chain::get_last_block,
+    blockchain::{
+        chain::{get_chain_height, get_last_block},
+        merkle::MerkleTree,
+        transaction::tx::{coinbase_tx, Tx, COINBASE_REWARD},
+    },
     cli::db::{self, get_block, get_last_hash},
     wallets::address::Address,
 };
 use hex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-use super::{
-    chain::get_chain_height,
-    merkle::MerkleTree,
-    transaction::tx::{coinbase_tx, Tx, COINBASE_REWARD},
-};
 
 pub type OrphanBlocks = HashMap<[u8; 32], Block>;
 
@@ -110,6 +108,7 @@ impl Block {
         // Leave an empty line after the hash is found
         println!();
 
+        // TODO: investigate removing the following 2 lines
         self.hash = hash;
         self.nonce = nonce;
         println!("Hash found: {}", hex::encode(&hash));

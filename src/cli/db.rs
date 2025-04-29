@@ -1,15 +1,14 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
 use once_cell::sync::Lazy;
-use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Options, DB};
+use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, IteratorMode, Options, DB};
 
 use crate::blockchain::{
-    block::{Block, OrphanBlocks},
-    chain::get_chain_height,
+    blocks::block::{Block, OrphanBlocks},
     transaction::{
-        mempool::{update_mempool, Mempool},
+        mempool::Mempool,
         tx::{Tx, TxOutput},
-        utxo::{update_utxos, TxOutMap},
+        utxo::TxOutMap,
     },
 };
 
@@ -152,12 +151,41 @@ pub fn get_block(block_hash: &[u8; 32]) -> Result<Option<Block>, Box<dyn Error>>
     }
 }
 
+pub fn get_all_block_hashes() -> Result<Vec<[u8; 32]>, Box<dyn Error>> {
+    let iter = ROCKS_DB.iterator_cf(block_cf(), IteratorMode::Start);
+    let mut block_hashes: Vec<[u8; 32]> = Vec::new();
+    for res in iter {
+        match res {
+            Err(_) => {
+                return Err(
+                    "[db::get_all_block_hashes] ERROR: Failed to iterate through db".into(),
+                );
+            }
+            Ok((key, _)) => {
+                let block_hash: [u8; 32] = key.into_vec().try_into().map_err(|e| {
+                    format!(
+                        "[db::get_all_block_hashes] ERROR: Failed to unwrap key {:?}",
+                        e
+                    )
+                })?;
+                block_hashes.push(block_hash);
+            }
+        }
+    }
+    Ok(block_hashes)
+}
+
+// TODO: remove block hash input requirement and remove expects
 pub fn put_block(block_hash: &[u8; 32], block_data: &Block) {
     let serialized =
         bincode::serialize(&block_data).expect("[db::put_block] ERROR: Serialization failed");
     ROCKS_DB
         .put_cf(block_cf(), block_hash, serialized)
         .expect("[db::put_block] ERROR: Failed to write to DB");
+}
+
+pub fn delete_block(block_hash: &[u8; 32]) {
+    let _ = ROCKS_DB.delete_cf(block_cf(), block_hash);
 }
 
 pub fn delete_all_blocks() {
@@ -242,6 +270,12 @@ pub fn delete_mempool() {
 }
 
 /*** Orphan DB handlers ***/
+
+/// MAX_ORPHAN_CHAIN_AGE is the max chain height an orphan chain can be behind the accepted chain before being discarded by the node
+///
+/// Ex. An orphan chain of 5 blocks that is 11 blocks behind the accepted chain will be discarded. Any less and it will be retained incase the chain completes
+pub const MAX_ORPHAN_CHAIN_AGE: u32 = 10;
+
 pub fn get_orphaned_blocks() -> OrphanBlocks {
     let block_data = ROCKS_DB.get(ORPHAN_KEY.as_bytes()).unwrap();
     block_data
@@ -279,90 +313,7 @@ pub fn remove_from_orphan_blocks(block_hashes: Vec<[u8; 32]>) {
         .expect("[db::remove_blocks_from_orphan_blocks] ERROR: Failed to write to DB");
 }
 
-pub fn check_for_valid_orphan_blocks() -> Result<(), Box<dyn Error>> {
-    let block_map = get_orphaned_blocks();
-    let last_hash = get_last_hash()?;
-    for (_, block) in block_map.iter() {
-        if block.prev_hash == last_hash {
-            println!("Valid orphan block found! Attempting to commit...");
-            commit_block(&block.clone())?;
-        }
-    }
-
-    Ok(())
-}
-
 pub fn delete_all_orphan_blocks() {
-    // Delete the mempool key, effectively resetting the entire mempool. No error on failure
+    // Delete the orphan key, effectively resetting the orphan block storage. No error on failure
     let _ = ROCKS_DB.delete(ORPHAN_KEY);
-}
-
-pub fn commit_block(block: &Block) -> Result<(), Box<dyn Error>> {
-    match block.verify() {
-        Ok(v) => {
-            if !v {
-                println!("Verification failed for given block!");
-                println!("Checking if block is a valid orphan block...");
-                match block.verify_orphan() {
-                    Ok(v) => {
-                        if !v {
-                            println!("Block is not a valid orphan block and will be discarded");
-                            return Ok(());
-                        }
-                        put_orphan_block(&block);
-                        println!("Block is a valid orphan and has been persisted for future consideration");
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        return Err(
-                            format!("[network::handle_inventory_res] ERROR: {:?}", e).into()
-                        );
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            return Err(format!(
-                "[network::handle_inventory_res] ERROR: failed to verify block: {:?}",
-                e
-            )
-            .into());
-        }
-    }
-
-    // TODO: Should send a signal to cancel mining
-    if let Err(e) = update_utxos(&block) {
-        return Err(format!(
-            "[miner::handle_mine] ERROR: Failed to update utxos: {:?}",
-            e
-        )
-        .into());
-    };
-
-    if let Err(e) = update_mempool(&block) {
-        return Err(format!(
-            "[miner::handle_mine] ERROR: Failed to update mempool: {:?}",
-            e
-        )
-        .into());
-    };
-
-    put_block(&block.hash, &block);
-    remove_from_orphan_blocks(vec![block.hash]);
-
-    let current_height = if let Ok(h) = get_chain_height() {
-        h
-    } else {
-        // Chain is empty, therefore set curr height to 0
-        0
-    };
-    if block.height >= current_height {
-        put_last_hash(&block.hash);
-    }
-
-    // Check if new block allows orphaned blocks to be committed
-    check_for_valid_orphan_blocks()?;
-
-    println!("Block was successfully committed to the blockchain");
-    Ok(())
 }
