@@ -49,6 +49,7 @@ pub async fn start_miner(p2p: Sender<P2Prx>, reward_address: Option<String>) {
     };
 
     // Trigger mining every 10 seconds for now
+    // TODO: implement mining based on mempool size or time
     let mut interval = time::interval(Duration::from_secs(10));
 
     loop {

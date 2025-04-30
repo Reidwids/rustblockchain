@@ -425,7 +425,7 @@ impl BlockchainBehaviour {
 
                         // Ensure no txs are double spent
                         for tx_input in &tx.inputs {
-                            if !mempool_contains_txo(tx_input.prev_tx_id, tx_input.out) {
+                            if mempool_contains_txo(tx_input.prev_tx_id, tx_input.out) {
                                 println!("[network::handle_inventory_res] ERROR: tx contains outputs spent in mempool");
                                 return;
                             }
