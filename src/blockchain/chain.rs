@@ -227,7 +227,7 @@ pub fn commit_block(block: &Block) -> Result<(), Box<dyn Error>> {
         .into());
     };
 
-    put_block(&block.hash, &block);
+    put_block(&block);
     remove_from_orphan_blocks(vec![block.hash]);
 
     let current_height = if let Ok(h) = get_chain_height() {

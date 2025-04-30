@@ -279,33 +279,43 @@ impl BlockchainBehaviour {
         };
 
         match serde_json::from_slice::<NewInventory>(&message.data) {
-            Ok(inv) => {
-                match inv {
-                    NewInventory::Transaction(tx_id) => {
-                        if !mempool_contains_tx(tx_id)
-                            && !utxo_set_contains_tx(tx_id).unwrap_or(false)
-                        {
-                            match self.gossipsub.publish(
+            Ok(inv) => match inv {
+                NewInventory::Transaction(tx_id) => {
+                    if !mempool_contains_tx(tx_id) && !utxo_set_contains_tx(tx_id).unwrap_or(false)
+                    {
+                        match self.gossipsub.publish(
                                 GossipTopic::InvReq(requesting_peer).to_ident_topic(),
                                 message.data,
                             ) {
                                Err(e) =>  println!(
-                                    "[network::handle_new_inventory] ERROR: Failed to publish new inventory: {:?}",
+                                    "[network::handle_new_inventory] ERROR: Failed to publish inventory request: {:?}",
                                     e
                                 ),
                                 Ok(_)=> println!(
                                     "Tx not found in chain - requesting tx from sender...",
                                 ),
                             }
-                        }
-                    }
-                    NewInventory::Block(block_hash) => {
-                        // Check if we have the block
-                        // If not, request block from sender
-                        // TODO: Next
                     }
                 }
-            }
+                NewInventory::Block(block_hash) => match get_block(&block_hash) {
+                    Ok(None) => {
+                        match self.gossipsub.publish(
+                            GossipTopic::InvReq(requesting_peer).to_ident_topic(),
+                            message.data,
+                        ) {
+                           Err(e) =>  println!(
+                                "[network::handle_new_inventory] ERROR: Failed to publish inventory request: {:?}",
+                                e
+                            ),
+                            Ok(_)=> println!(
+                                "Block not found in chain - requesting block from sender...",
+                            ),
+                        }
+                    }
+                    Ok(Some(_)) => {}
+                    Err(e) => println!("{}", e),
+                },
+            },
             Err(e) => {
                 println!("Failed to deserialize inventory data: {}", e);
             }

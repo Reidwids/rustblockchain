@@ -123,7 +123,7 @@ impl ChainManager {
 
             // Re-add removed blocks if any
             for block in snapshot.removed_blocks.iter().rev() {
-                put_block(&block.hash, block);
+                put_block(block);
             }
 
             self.snapshot = None;
@@ -367,7 +367,7 @@ fn apply_block_to_chain(block: &Block, manager: &mut ChainManager) -> Result<(),
         remove_txs_from_mempool(vec![tx.id]);
     }
 
-    put_block(&block.hash, block);
+    put_block(block);
     put_last_hash(&block.hash);
     Ok(())
 }

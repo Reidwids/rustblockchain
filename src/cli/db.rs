@@ -175,12 +175,11 @@ pub fn get_all_block_hashes() -> Result<Vec<[u8; 32]>, Box<dyn Error>> {
     Ok(block_hashes)
 }
 
-// TODO: remove block hash input requirement and remove expects
-pub fn put_block(block_hash: &[u8; 32], block_data: &Block) {
+pub fn put_block(block_data: &Block) {
     let serialized =
         bincode::serialize(&block_data).expect("[db::put_block] ERROR: Serialization failed");
     ROCKS_DB
-        .put_cf(block_cf(), block_hash, serialized)
+        .put_cf(block_cf(), block_data.hash, serialized)
         .expect("[db::put_block] ERROR: Failed to write to DB");
 }
 

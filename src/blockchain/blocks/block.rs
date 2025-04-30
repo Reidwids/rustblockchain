@@ -117,7 +117,7 @@ impl Block {
         // Prepare block for db
         let block_hash = self.hash()?;
         // Store block ref and last hash
-        db::put_block(&block_hash, self);
+        db::put_block(self);
         db::put_last_hash(&block_hash);
         Ok(())
     }
