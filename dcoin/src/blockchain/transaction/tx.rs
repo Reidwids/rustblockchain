@@ -1,3 +1,5 @@
+use core_lib::address::{hash_pub_key, Address};
+use core_lib::wallet::Wallet;
 use secp256k1::ecdsa::Signature;
 use secp256k1::rand::RngCore;
 use secp256k1::{rand, Message, PublicKey, Secp256k1, SecretKey};
@@ -6,8 +8,6 @@ use sha2::{Digest, Sha256};
 use std::{error::Error, fmt::Debug};
 
 use crate::cli::db::get_utxo;
-use crate::wallets::address::{hash_pub_key, Address};
-use crate::wallets::wallet::Wallet;
 
 use super::utxo::UTXOSet;
 

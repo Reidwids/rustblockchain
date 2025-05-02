@@ -1,3 +1,4 @@
+use core_lib::{address::Address, wallet::Wallet};
 use reqwest::Client;
 use tokio::sync::mpsc;
 
@@ -19,10 +20,7 @@ use crate::{
             rest_api::{start_rest_api, SEED_API_NODE},
         },
     },
-    wallets::{
-        address::Address,
-        wallet::{Wallet, WalletStore},
-    },
+    wallets::wallet::WalletStore,
 };
 
 pub fn handle_get_node_id() {

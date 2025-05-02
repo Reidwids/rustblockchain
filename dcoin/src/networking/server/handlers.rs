@@ -7,7 +7,6 @@ use crate::{
         },
     },
     networking::p2p::network::{NewInventory, P2Prx},
-    wallets::address::Address,
 };
 
 use axum::{
@@ -15,6 +14,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
+use core_lib::address::Address;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::mpsc::Sender;

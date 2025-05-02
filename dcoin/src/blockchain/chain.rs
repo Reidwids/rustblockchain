@@ -1,3 +1,4 @@
+use core_lib::address::Address;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
@@ -12,7 +13,6 @@ use crate::{
         delete_last_hash, delete_mempool, get_block, get_last_hash, put_block, put_last_hash,
         put_orphan_block, remove_from_orphan_blocks,
     },
-    wallets::address::Address,
 };
 use hex;
 

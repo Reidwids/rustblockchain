@@ -14,7 +14,6 @@ mod blockchain {
     pub mod chain;
 }
 mod wallets {
-    pub mod address;
     pub mod wallet;
 }
 mod networking {

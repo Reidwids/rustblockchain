@@ -13,8 +13,8 @@ use crate::{
         transaction::tx::{coinbase_tx, Tx, COINBASE_REWARD},
     },
     cli::db::{self, get_block, get_last_hash},
-    wallets::address::Address,
 };
+use core_lib::address::Address;
 use hex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

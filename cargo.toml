@@ -1,0 +1,2 @@
+[workspace]
+members = ["dcoin", "dcoin_wasm", "core_lib"]
