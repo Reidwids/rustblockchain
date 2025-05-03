@@ -1,5 +1,5 @@
-# Dcoin Wasm library
-The Dcoin wasm library brings Dcoin to the browser - where we can create wallets & send transactions right from the browser.
+# dCoin Wasm library
+The dCoin wasm library brings dCoin to the browser - where we can create wallets & send transactions right from the browser.
 
 ## Getting started
 

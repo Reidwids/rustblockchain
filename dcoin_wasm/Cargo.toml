@@ -1,5 +1,5 @@
 [package]
-name = "dCoin_wasm"
+name = "dcoin_wasm"
 version = "0.1.0"
 edition = "2024"
 

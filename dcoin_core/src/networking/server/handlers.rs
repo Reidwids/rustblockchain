@@ -23,7 +23,7 @@ use super::req_types::{convert_utxoset_to_json, TxJson, UTXOSetJson};
 
 pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(Json(json!({
-        "name": "Dcoin API",
+        "name": "dCoin API",
         "version": "0.0.1"
     })))
 }

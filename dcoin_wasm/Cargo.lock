@@ -91,7 +91,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dCoin_wasm"
+name = "dcoin_wasm"
 version = "0.1.0"
 dependencies = [
  "core_lib",
