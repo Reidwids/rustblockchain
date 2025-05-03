@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { loadWasm } from "./wasm-loader";
+import { createWallet } from "./wasm-util/wasm";
+import { Wallet } from "./wasm-util/wasm-types";
 
 function App() {
-	const [wallet, setWallet] = useState<any>(null);
+	const [wallet, setWallet] = useState<Wallet>();
 
 	useEffect(() => {
-		loadWasm().then(({ create_wallet }) => {
-			const result = create_wallet();
-			setWallet(result);
+		createWallet().then((wallet) => {
+			setWallet(wallet);
 		});
 	}, []);
 
