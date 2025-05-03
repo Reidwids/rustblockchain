@@ -1,0 +1,15 @@
+{
+  "name": "dcoin_wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "dcoin_wasm_bg.wasm",
+    "dcoin_wasm.js",
+    "dcoin_wasm.d.ts"
+  ],
+  "main": "dcoin_wasm.js",
+  "types": "dcoin_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

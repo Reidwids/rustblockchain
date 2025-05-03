@@ -962,29 +962,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dcoin_core"
-version = "0.1.0"
-dependencies = [
- "axum",
- "base58",
- "bincode",
- "clap",
- "core_lib",
- "hex",
- "lazy_static",
- "libp2p",
- "once_cell",
- "reqwest",
- "ripemd",
- "rocksdb",
- "secp256k1",
- "serde",
- "serde_json",
- "sha2 0.10.8",
- "tokio",
-]
-
-[[package]]
 name = "data-encoding"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1008,6 +985,29 @@ checksum = "18e4fdb82bd54a12e42fb58a800dcae6b9e13982238ce2296dc3570b92148e1f"
 dependencies = [
  "data-encoding",
  "syn",
+]
+
+[[package]]
+name = "dcoin_core"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base58",
+ "bincode",
+ "clap",
+ "core_lib",
+ "hex",
+ "lazy_static",
+ "libp2p",
+ "once_cell",
+ "reqwest",
+ "ripemd",
+ "rocksdb",
+ "secp256k1",
+ "serde",
+ "serde_json",
+ "sha2 0.10.8",
+ "tokio",
 ]
 
 [[package]]
