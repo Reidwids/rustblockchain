@@ -1,6 +1,6 @@
 // src/wasm-loader.ts
 import { Wallet, WalletSchema } from "./wasm-types";
-import init, * as wasm from "../../wasm/dcoin_wasm";
+import init, * as wasm from "../../../wasm/dcoin_wasm";
 
 let initialized: Promise<typeof wasm> | null = null;
 
