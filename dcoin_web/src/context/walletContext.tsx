@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState } from "react";
 import { decryptWallet, EncryptedWallet } from "../util/wallet";
-import { Wallet } from "../util/wasm/wasm-types";
+import { JsWallet } from "../../wasm/dcoin_wasm";
 
 interface WalletContextType {
-	activeWallet: Wallet | null;
+	activeWallet: JsWallet | null;
 	selectWallet: (pubKey: string, ecw: EncryptedWallet, password: string) => Promise<void>;
 }
 
@@ -15,7 +15,7 @@ export const useWallet = (): WalletContextType => {
 	return context;
 };
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-	const [activeWallet, setActiveWallet] = useState<Wallet | null>(null);
+	const [activeWallet, setActiveWallet] = useState<JsWallet | null>(null);
 
 	const selectWallet = async (publicKey: string, ecw: EncryptedWallet, password: string): Promise<void> => {
 		const wallet = await decryptWallet(publicKey, ecw, password);
