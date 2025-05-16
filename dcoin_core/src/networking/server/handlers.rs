@@ -3,6 +3,7 @@ use crate::{
         chain::get_blockchain_json,
         transaction::{
             mempool::add_tx_to_mempool,
+            tx::TxVerify,
             utxo::{find_spendable_utxos, find_utxos_for_addr, reindex_utxos},
         },
     },
@@ -14,12 +15,13 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Json, Response},
 };
-use core_lib::address::Address;
+use core_lib::{
+    address::Address,
+    req_types::{convert_utxoset_to_json, GetUTXORes, TxJson, UTXOSetJson},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::mpsc::Sender;
-
-use super::req_types::{convert_utxoset_to_json, TxJson, UTXOSetJson};
 
 pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
     Ok(Json(json!({
@@ -77,18 +79,6 @@ pub async fn handle_get_wallet_balance(
         "address": addr,
         "balance": balance
     })))
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GetUTXORes {
-    pub address: String,
-    pub utxos: UTXOSetJson,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct UTXOJson {
-    pub value: u32,
-    pub pub_key_hash: String, // This is hex-encoded
 }
 
 #[derive(Deserialize)]

@@ -1,8 +1,8 @@
-use core_lib::address::Address;
+use core_lib::{address::Address, tx::Tx};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 
-use super::{blocks::block::Block, transaction::tx::Tx};
+use super::blocks::block::Block;
 use crate::{
     blockchain::{
         blocks::orphan::{check_for_valid_orphan_blocks, check_orphans_for_longest_chain},

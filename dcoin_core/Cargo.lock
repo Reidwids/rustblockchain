@@ -835,6 +835,8 @@ name = "core_lib"
 version = "0.1.0"
 dependencies = [
  "base58",
+ "bincode",
+ "hex",
  "ripemd",
  "secp256k1",
  "serde",

@@ -1,25 +1,20 @@
-use core_lib::{address::Address, wallet::Wallet};
+use core_lib::{
+    address::Address,
+    constants::SEED_API_NODE,
+    req_types::{convert_json_to_utxoset, GetUTXORes, TxJson},
+    tx::Tx,
+    wallet::Wallet,
+};
 use reqwest::Client;
 use tokio::sync::mpsc;
 
 use crate::{
     blockchain::{
         chain::{clear_blockchain, create_blockchain, get_blockchain_json},
-        transaction::{
-            tx::Tx,
-            utxo::{find_utxos_for_addr, reindex_utxos, UTXOSet},
-        },
+        transaction::utxo::{find_utxos_for_addr, reindex_utxos, UTXOSet},
     },
     mining::miner::start_miner,
-    networking::{
-        node::Node,
-        p2p::network::start_p2p_network,
-        server::{
-            handlers::GetUTXORes,
-            req_types::{convert_json_to_utxoset, TxJson},
-            rest_api::{start_rest_api, SEED_API_NODE},
-        },
-    },
+    networking::{node::Node, p2p::network::start_p2p_network, server::rest_api::start_rest_api},
     wallets::wallet::WalletStore,
 };
 
@@ -123,7 +118,7 @@ pub fn handle_get_balance(req_addr: &String) {
     println!("Balance: {}", balance);
 }
 
-pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>, _: bool) {
+pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>) {
     let client = Client::new();
 
     let wallet_store = WalletStore::init_wallet_store()

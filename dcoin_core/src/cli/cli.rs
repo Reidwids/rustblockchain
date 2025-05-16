@@ -76,8 +76,6 @@ enum Commands {
         value: u32,
         #[arg(short = 'f', long = "from")]
         from: Option<String>,
-        #[arg(short = 'm', long = "mine")]
-        mine: bool,
     },
 }
 
@@ -99,12 +97,7 @@ impl Cli {
             Commands::ClearBlockchain => handle_clear_blockchain(),
             Commands::PrintBlockchain { show_txs } => handle_print_blockchain(*show_txs),
             Commands::GetBalance { address } => handle_get_balance(address),
-            Commands::SendTx {
-                to,
-                value,
-                from,
-                mine,
-            } => handle_send_tx(to, *value, from, *mine).await,
+            Commands::SendTx { to, value, from } => handle_send_tx(to, *value, from).await,
         }
     }
 }

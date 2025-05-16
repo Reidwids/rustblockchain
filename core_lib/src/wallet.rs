@@ -1,5 +1,8 @@
+use std::str::FromStr;
+
 use secp256k1::{PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 
 use crate::address::Address;
 
@@ -32,5 +35,15 @@ impl Wallet {
 
     pub fn private_key(&self) -> &SecretKey {
         &self.private_key
+    }
+
+    pub fn from_keys(pub_key: String, priv_key: String) -> Result<Self, Box<dyn Error>> {
+        let private_key = SecretKey::from_str(&priv_key)?;
+        let public_key = PublicKey::from_str(&pub_key)?;
+
+        Ok(Wallet {
+            private_key,
+            public_key,
+        })
     }
 }

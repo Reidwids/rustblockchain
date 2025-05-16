@@ -11,9 +11,6 @@ use super::handlers::{
     handle_root, handle_send_tx,
 };
 
-// TODO: come up with a better seeding solution
-pub const SEED_API_NODE: &str = "http://localhost:3000";
-
 pub async fn start_rest_api(tx: Sender<P2Prx>, port: Option<u16>) {
     // Start the HTTP server
     let port = port.unwrap_or(3000);

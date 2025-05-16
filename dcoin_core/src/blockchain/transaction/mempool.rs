@@ -1,9 +1,10 @@
+use core_lib::tx::Tx;
+
 use crate::{
     blockchain::blocks::block::Block,
     cli::db::{self, get_mempool},
 };
 
-use super::tx::Tx;
 use std::{collections::HashMap, error::Error};
 
 pub type Mempool = HashMap<[u8; 32], Tx>;

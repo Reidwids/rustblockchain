@@ -1,15 +1,12 @@
 use std::{collections::HashMap, error::Error, sync::Arc};
 
+use core_lib::tx::{Tx, TxOutput};
 use once_cell::sync::Lazy;
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, IteratorMode, Options, DB};
 
 use crate::blockchain::{
     blocks::block::{Block, OrphanBlocks},
-    transaction::{
-        mempool::Mempool,
-        tx::{Tx, TxOutput},
-        utxo::TxOutMap,
-    },
+    transaction::{mempool::Mempool, utxo::TxOutMap},
 };
 
 /// LAST_HASH_KEY holds the key to discover the last block hash

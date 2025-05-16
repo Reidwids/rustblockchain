@@ -3,12 +3,12 @@ use std::error::Error;
 use std::sync::{Arc, Mutex};
 
 use crate::blockchain::chain::{commit_block, get_last_block, get_tx_from_chain};
-use crate::blockchain::transaction::tx::TxOutput;
 use crate::cli::db::{
     delete_block, delete_utxo, get_all_block_hashes, get_block, get_last_hash, get_orphaned_blocks,
     put_block, put_last_hash, put_mempool, put_utxo, remove_from_orphan_blocks,
     remove_txs_from_mempool, MAX_ORPHAN_CHAIN_AGE,
 };
+use core_lib::tx::TxOutput;
 use lazy_static::lazy_static;
 
 use super::block::Block;

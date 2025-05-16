@@ -1,5 +1,6 @@
 use std::{collections::HashMap, error::Error};
 
+use core_lib::tx::TxOutput;
 use rocksdb::IteratorMode;
 
 use crate::{
@@ -7,7 +8,7 @@ use crate::{
     cli::db::{self, utxo_cf, ROCKS_DB},
 };
 
-use super::{mempool::mempool_contains_txo, tx::TxOutput};
+use super::mempool::mempool_contains_txo;
 
 pub type TxOutMap = HashMap<u32, TxOutput>;
 pub type UTXOSet = HashMap<[u8; 32], TxOutMap>;

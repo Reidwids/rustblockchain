@@ -1,11 +1,9 @@
-use crate::blockchain::transaction::{
-    tx::{Tx, TxInput, TxOutput},
-    utxo::UTXOSet,
-};
 use hex::decode;
-use secp256k1::{ecdsa::Signature, PublicKey};
+use secp256k1::{PublicKey, ecdsa::Signature};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error};
+
+use crate::tx::{Tx, TxInput, TxOutput, UTXOSet};
 
 #[derive(Serialize, Deserialize)]
 pub struct TxJson {
@@ -161,4 +159,16 @@ pub fn convert_json_to_utxoset(json: &UTXOSetJson) -> Result<UTXOSet, Box<dyn st
     }
 
     Ok(utxoset)
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetUTXORes {
+    pub address: String,
+    pub utxos: UTXOSetJson,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UTXOJson {
+    pub value: u32,
+    pub pub_key_hash: String, // This is hex-encoded
 }
