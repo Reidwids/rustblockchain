@@ -219,8 +219,7 @@ export function send_tx(to, from_wallet, value) {
     const ptr0 = passStringToWasm0(to, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     _assertClass(from_wallet, JsWallet);
-    var ptr1 = from_wallet.__destroy_into_raw();
-    const ret = wasm.send_tx(ptr0, len0, ptr1, value);
+    const ret = wasm.send_tx(ptr0, len0, from_wallet.__wbg_ptr, value);
     return ret;
 }
 

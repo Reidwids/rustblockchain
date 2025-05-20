@@ -49,7 +49,7 @@ impl JsWallet {
 }
 
 #[wasm_bindgen]
-pub async fn send_tx(to: &str, from_wallet: JsWallet, value: u32) -> Result<JsValue, JsValue> {
+pub async fn send_tx(to: &str, from_wallet: &JsWallet, value: u32) -> Result<JsValue, JsValue> {
     let from_address = from_wallet.get_wallet_address();
 
     let url = format!(
