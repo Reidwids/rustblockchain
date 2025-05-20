@@ -1,8 +1,10 @@
 use axum::{
+    http::Method,
     routing::{get, post},
     Router,
 };
 use tokio::{net::TcpListener, sync::mpsc::Sender};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::networking::p2p::network::P2Prx;
 
@@ -24,6 +26,11 @@ pub async fn start_rest_api(tx: Sender<P2Prx>, port: Option<u16>) {
 }
 
 fn create_router(p2p: Sender<P2Prx>) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers(Any);
+
     Router::new()
         .route("/", get(handle_root))
         .route("/health", get(handle_health_check))
@@ -32,4 +39,5 @@ fn create_router(p2p: Sender<P2Prx>) -> Router {
         .route("/chain", get(handle_get_chain))
         .route("/tx/send", post(handle_send_tx))
         .with_state(p2p)
+        .layer(cors)
 }
