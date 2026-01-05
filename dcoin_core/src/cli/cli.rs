@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use colored::*;
 
 use super::handlers::{
     handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_balance,
@@ -99,5 +100,22 @@ impl Cli {
             Commands::GetBalance { address } => handle_get_balance(address),
             Commands::SendTx { to, value, from } => handle_send_tx(to, *value, from).await,
         }
+    }
+}
+
+pub struct CliUI {}
+
+impl CliUI {
+    pub fn print_header(text: &str) {
+        println!("{}", text.bold().underline().green());
+    }
+    pub fn print_kv(label: &str, value: &str) {
+        println!("{}: {}", label.blue().bold(), value.cyan());
+    }
+    pub fn print_text(text: &str) {
+        println!("{}", text.white());
+    }
+    pub fn print_error(text: &str) {
+        eprintln!("{}", text.red().bold());
     }
 }
