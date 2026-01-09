@@ -42,11 +42,6 @@ impl Node {
             let _ = ROCKS_DB.put(NODE_KEY, encoded);
         }
 
-        println!(
-            "No local node keys found. Created new peer id: {:?}",
-            public_key
-        );
-
         Self {
             public_key,
             private_key,

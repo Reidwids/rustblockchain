@@ -15,9 +15,12 @@ use crate::{
     blockchain::{
         blocks::block::{get_blocks_since_height, Block},
         chain::{clear_blockchain, commit_block, get_last_block},
-        transaction::{mempool::{
-            add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx, mempool_contains_txo,
-        }, tx::TxVerify},
+        transaction::{
+            mempool::{
+                add_tx_to_mempool, get_tx_from_mempool, mempool_contains_tx, mempool_contains_txo,
+            },
+            tx::TxVerify,
+        },
     },
     cli::db::{get_block, utxo_set_contains_tx},
     networking::node::Node,

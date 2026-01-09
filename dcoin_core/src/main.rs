@@ -1,4 +1,5 @@
 use cli::cli::Cli;
+use env_logger::Env;
 
 mod blockchain {
     pub mod blocks {
@@ -38,5 +39,6 @@ mod mining {
 
 #[tokio::main]
 async fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     Cli::run().await;
 }
