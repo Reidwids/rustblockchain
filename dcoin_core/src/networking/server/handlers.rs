@@ -26,7 +26,7 @@ use serde_json::json;
 use tokio::sync::mpsc::Sender;
 
 pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
-    info!("http::handle_root");
+    info!("http request: GET /");
     Ok(Json(json!({
         "name": "dCoin API",
         "version": "0.0.1"
@@ -36,7 +36,7 @@ pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
 pub async fn handle_health_check(
     tx: State<Sender<P2Prx>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    info!("http::handle_health_check");
+    info!("http request: GET /health");
     debug!("sending HealthCheck message to P2P server");
     tx.send(P2Prx::HealthCheck()).await.map_err(|e| {
         error!("p2p service health check failed: {:?}", e);
@@ -57,7 +57,7 @@ pub async fn handle_health_check(
 pub async fn handle_get_wallet_balance(
     Path(addr): Path<String>,
 ) -> Result<Json<GetWalletBalanceRes>, ErrorResponse> {
-    info!("http::handle_get_wallet_balance");
+    info!("http request: GET /wallet/balance");
     let wallet_addr: Address = Address::new_from_str(&addr).map_err(|e| {
         error!("failed to resolve address from request: {:?}", e);
         ErrorResponse {
@@ -88,7 +88,7 @@ pub struct UTXOQuery {
 pub async fn handle_get_spendable_utxos(
     Query(params): Query<UTXOQuery>,
 ) -> Result<Json<GetUTXORes>, ErrorResponse> {
-    info!("http::handle_get_spendable_utxos");
+    info!("http request: GET /utxo");
     let wallet_addr: Address = Address::new_from_str(&params.address).map_err(|e| {
         error!("failed to resolve address from request: {:?}", e);
         ErrorResponse {
@@ -121,7 +121,7 @@ pub struct ChainQuery {
 pub async fn handle_get_chain(
     Query(params): Query<ChainQuery>,
 ) -> Result<Json<serde_json::Value>, ErrorResponse> {
-    info!("http::handle_get_chain");
+    info!("http request: GET /chain");
     match get_blockchain_json(params.show_txs.unwrap_or(false)) {
         Ok(blocks) => Ok(Json(json!(blocks))),
         Err(e) => {
@@ -138,7 +138,7 @@ pub async fn handle_send_tx(
     p2p: State<Sender<P2Prx>>,
     Json(payload): Json<TxJson>,
 ) -> Result<Json<serde_json::Value>, ErrorResponse> {
-    info!("http::handle_send_tx");
+    info!("http request: POST /tx/send");
     let tx = payload.to_tx().map_err(|e| {
         error!("failed to marshal tx request payload: {:?}", e);
         ErrorResponse {

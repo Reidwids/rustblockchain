@@ -7,6 +7,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     tcp, yamux, Multiaddr, PeerId, SwarmBuilder,
 };
+use log::{error, info, warn};
 use serde::{Deserialize, Serialize};
 use std::{error::Error, str::FromStr};
 use tokio::sync::mpsc;
@@ -49,7 +50,7 @@ pub async fn start_p2p_network(
     port: u16,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let node = Node::get_or_create_keys();
-    println!("Local peer id: {}", node.get_peer_id());
+    info!("local peer id: {}", node.get_peer_id());
 
     let p2p_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
 
@@ -75,8 +76,8 @@ pub async fn start_p2p_network(
     // Connect to each bootstrap node. Successful dial actions create a "connection established" event, at which point they're added to kademlia
     for node_addr in bootstrap_nodes {
         match swarm.dial(node_addr.clone()) {
-            Ok(_) => println!("Dialed bootstrap node: {}", node_addr),
-            Err(e) => println!("Failed to dial bootstrap node {}: {}", node_addr, e),
+            Ok(_) => info!("dialed bootstrap node: {}", node_addr),
+            Err(e) => error!("failed to dial bootstrap node {}: {:?}", node_addr, e),
         }
     }
 
@@ -90,7 +91,7 @@ pub async fn start_p2p_network(
                         gossipsub::Event::Subscribed { peer_id: _, topic } ))=> {
                         if topic.as_str() == CHAIN_SYNC_REQ_TOPIC {
                             if let Err(e) = swarm.behaviour_mut().publish_chainsync_req() {
-                                println!("Failed to publish chain sync request: {}", e);
+                                error!("failed to publish chain sync request: {:?}", e);
                             }
                         }
                     }
@@ -105,7 +106,7 @@ pub async fn start_p2p_network(
                             let parts: Vec<&str> = topic_str.split(':').collect();
 
                             if parts.len() < 3 {
-                                return Err("[gossipsub::direct] ERROR: Received invalid direct message".into())
+                                warn!("received invalid direct message: {}", topic_str);
                             }
                                 let target_peer_id = parts[1];
 
@@ -142,13 +143,13 @@ pub async fn start_p2p_network(
                     SwarmEvent::Behaviour(BlockchainBehaviourEvent::Kademlia(event)) => {
                         match event {
                             kad::Event::RoutingUpdated { peer, .. } => {
-                                println!("Kademlia routing updated for peer: {}", peer);
+                                info!("kademlia routing updated for peer: {}", peer);
                                 // Bootstrap Kademlia on new connections
                                 match swarm.behaviour_mut().kademlia.bootstrap() {
                                     Ok(_) => {
-                                        println!("Bootstrapped Kademlia DHT");
+                                        info!("bootstrapped Kademlia DHT");
                                     },
-                                    Err(e) => println!("Failed to bootstrap Kademlia DHT: {}", e),
+                                    Err(e) => error!("failed to bootstrap Kademlia DHT: {:?}", e),
                                 }
                             }
                             _ => {}
@@ -157,12 +158,12 @@ pub async fn start_p2p_network(
 
                     // Listen address events (original functionality)
                     SwarmEvent::NewListenAddr { address, .. } => {
-                        println!("Listening on {}", address);
+                        info!("listening for p2p events on address {}", address);
                     }
 
                     // Connection established events - add peer to Kademlia
                     SwarmEvent::ConnectionEstablished { peer_id, endpoint, .. } => {
-                        println!("Connected to peer: {}", peer_id);
+                        info!("connected to peer: {}", peer_id);
 
                         // Add connected peer to Kademlia routing table
                         swarm.behaviour_mut().kademlia.add_address(&peer_id, endpoint.get_remote_address().clone());
@@ -177,11 +178,11 @@ pub async fn start_p2p_network(
                     P2Prx::BroadcastNewInv(inv) => {
                         // Publish inventory to gossipsub topic (original functionality)
                         if let Err(e) = swarm.behaviour_mut().publish_new_inventory(&inv) {
-                            println!("Failed to broadcast inventory: {}", e);
+                            error!("failed to broadcast inventory: {}", e);
                         }
                     }
                     P2Prx::HealthCheck() => {
-                        println!("P2P Channel received health check")
+                        info!("P2P Channel received health check")
                     }
                 }
             }
@@ -206,20 +207,27 @@ impl BlockchainBehaviour {
             .max_transmit_size(10 * 1024 * 1024) // 10MB max message size
             .validation_mode(gossipsub::ValidationMode::Strict)
             .build()
-            .expect("[network::blockchain_behavior] ERROR: invalid gossipsub config");
+            .unwrap_or_else(|e| {
+                error!("invalid gossipsub config: {:?}", e);
+                std::process::exit(1);
+            });
 
         let mut gossipsub_behaviour = gossipsub::Behaviour::new(
             gossipsub::MessageAuthenticity::Signed(node.get_priv_key().clone()),
             gossipsub_config,
         )
-        .expect("[network::blockchain_behavior] ERROR: invalid gossipsub behavior");
+        .unwrap_or_else(|e| {
+            error!("invalid gossipsub behavior: {:?}", e);
+            std::process::exit(1);
+        });
 
         let topics = get_all_topics(&peer_id);
 
         for t in topics {
-            gossipsub_behaviour
-                .subscribe(&t)
-                .expect("[network::blockchain_behavior] ERROR: invalid gossipsub behavior");
+            gossipsub_behaviour.subscribe(&t).unwrap_or_else(|e| {
+                error!("invalid gossipsub behavior: {:?}", e);
+                std::process::exit(1);
+            });
         }
 
         // Configure Kademlia
@@ -244,7 +252,7 @@ impl BlockchainBehaviour {
         self.gossipsub
             .publish(GossipTopic::NewInv.to_ident_topic(), serialized_inv)?;
 
-        println!("Broadcasted inventory message to network!");
+        info!("broadcasted inventory message to network!");
         Ok(())
     }
 
@@ -254,7 +262,7 @@ impl BlockchainBehaviour {
         let height = match get_last_block() {
             Ok(b) => b.height,
             Err(_) => {
-                println!("Failed to find latest block - refreshing blockchain");
+                error!("failed to find latest block - refreshing blockchain");
                 clear_blockchain();
                 0
             }
@@ -266,16 +274,16 @@ impl BlockchainBehaviour {
         self.gossipsub
             .publish(GossipTopic::ChainSyncReq.to_ident_topic(), serialized)?;
 
-        println!("Broadcasted chainsync message to network!");
+        info!("broadcasted chainsync message to network!");
         Ok(())
     }
 
     fn handle_new_inventory(&mut self, message: Message) {
-        println!("Received inventory message from network");
+        info!("received inventory message from network");
         let requesting_peer = if let Some(peer) = message.source {
             peer
         } else {
-            println!("[network::handle_new_inventory] ERROR: Received message without a source.");
+            error!("received message without a source.");
             return;
         };
 
@@ -285,17 +293,14 @@ impl BlockchainBehaviour {
                     if !mempool_contains_tx(tx_id) && !utxo_set_contains_tx(tx_id).unwrap_or(false)
                     {
                         match self.gossipsub.publish(
-                                GossipTopic::InvReq(requesting_peer).to_ident_topic(),
-                                message.data,
-                            ) {
-                               Err(e) =>  println!(
-                                    "[network::handle_new_inventory] ERROR: Failed to publish inventory request: {:?}",
-                                    e
-                                ),
-                                Ok(_)=> println!(
-                                    "Tx not found in chain - requesting tx from sender...",
-                                ),
+                            GossipTopic::InvReq(requesting_peer).to_ident_topic(),
+                            message.data,
+                        ) {
+                            Err(e) => error!("failed to publish inventory request: {:?}", e),
+                            Ok(_) => {
+                                info!("tx not found in chain - requesting tx from sender...",)
                             }
+                        }
                     }
                 }
                 NewInventory::Block(block_hash) => match get_block(&block_hash) {
@@ -304,21 +309,18 @@ impl BlockchainBehaviour {
                             GossipTopic::InvReq(requesting_peer).to_ident_topic(),
                             message.data,
                         ) {
-                           Err(e) =>  println!(
-                                "[network::handle_new_inventory] ERROR: Failed to publish inventory request: {:?}",
-                                e
-                            ),
-                            Ok(_)=> println!(
-                                "Block not found in chain - requesting block from sender...",
-                            ),
+                            Err(e) => error!("failed to publish inventory request: {:?}", e),
+                            Ok(_) => {
+                                info!("block not found in chain - requesting block from sender...",)
+                            }
                         }
                     }
                     Ok(Some(_)) => {}
-                    Err(e) => println!("{}", e),
+                    Err(e) => error!("{}", e),
                 },
             },
             Err(e) => {
-                println!("Failed to deserialize inventory data: {}", e);
+                error!("failed to deserialize inventory data: {}", e);
             }
         }
     }
@@ -326,12 +328,10 @@ impl BlockchainBehaviour {
     // Handle received inventory message
     fn handle_inventory_req(&mut self, message: Message) {
         let requesting_peer = if let Some(peer) = message.source {
-            println!("Received inventory request from peer: {:?}", peer);
+            info!("received inventory request from peer: {:?}", peer);
             peer
         } else {
-            println!(
-                "[network::handle_inventory_req] ERROR: Received message from an unknown peer."
-            );
+            error!("received message from an unknown peer");
             return;
         };
 
@@ -342,27 +342,22 @@ impl BlockchainBehaviour {
                         let tx = if let Some(tx) = get_tx_from_mempool(tx_id) {
                             tx
                         } else {
-                            println!(
-                                "[network::handle_inventory_req] ERROR: tx not found in mempool."
-                            );
+                            error!("tx not found in mempool");
                             return;
                         };
                         let inventory = Inventory::Transaction(tx);
                         let serialized_tx = if let Ok(bytes) = serde_json::to_vec(&inventory) {
                             bytes
                         } else {
-                            println!("[network::handle_inventory_req] ERROR: failed to serialize inventory");
+                            error!("failed to serialize inventory");
                             return;
                         };
                         match self.gossipsub.publish(
                             GossipTopic::InvRes(requesting_peer).to_ident_topic(),
                             serialized_tx,
                         ) {
-                            Err(e) => println!(
-                                "[network::handle_inventory_req] ERROR: Failed to publish inventory req: {:?}",
-                                e
-                            ),
-                            Ok(_)=> println!("Sending tx record to peer: {:?}", requesting_peer),
+                            Err(e) => error!("failed to publish inventory req: {:?}", e),
+                            Ok(_) => info!("sending tx record to peer: {:?}", requesting_peer),
                         }
                     }
                     NewInventory::Block(block_hash) => {
@@ -372,39 +367,34 @@ impl BlockchainBehaviour {
                         let block = if let Ok(Some(b)) = get_block(&block_hash) {
                             b
                         } else {
-                            println!(
-                                "[network::handle_inventory_req] ERROR: block not found in local chain."
-                            );
+                            error!("block not found in local chain");
                             return;
                         };
                         let inventory = Inventory::Block(block);
                         let serialized_block = if let Ok(bytes) = serde_json::to_vec(&inventory) {
                             bytes
                         } else {
-                            println!("[network::handle_inventory_req] ERROR: failed to serialize inventory");
+                            error!("failed to serialize inventory");
                             return;
                         };
                         match self.gossipsub.publish(
                             GossipTopic::InvRes(requesting_peer).to_ident_topic(),
                             serialized_block,
                         ) {
-                            Err(e) => println!(
-                                "[network::handle_inventory_req] ERROR: Failed to publish inventory req: {:?}",
-                                e
-                            ),
-                            Ok(_)=> println!("Sending block record to peer: {:?}", requesting_peer),
+                            Err(e) => error!("failed to publish inventory req: {:?}", e),
+                            Ok(_) => info!("sending block record to peer: {:?}", requesting_peer),
                         }
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to deserialize inventory data: {}", e);
+                error!("failed to deserialize inventory data: {}", e);
             }
         }
     }
 
     fn handle_inventory_res(&mut self, message: Message) {
-        println!("Inventory record successfully retrieved");
+        info!("inventory record successfully retrieved");
         match serde_json::from_slice::<Inventory>(&message.data) {
             Ok(inv) => {
                 match inv {
@@ -412,14 +402,12 @@ impl BlockchainBehaviour {
                         match tx.verify() {
                             Ok(v) => {
                                 if !v {
-                                    println!(
-                                        "[network::handle_inventory_res] ERROR: Transaction verification failed!"
-                                    );
+                                    warn!("transaction verification failed for tx {:?}", tx.id);
                                     return;
                                 }
                             }
                             Err(e) => {
-                                println!("[network::handle_inventory_res] ERROR: Cannot mine block - {:?}", e);
+                                error!("encountered error while verifying tx {:?}: {:?}", tx.id, e);
                                 return;
                             }
                         };
@@ -427,46 +415,41 @@ impl BlockchainBehaviour {
                         // Ensure no txs are double spent
                         for tx_input in &tx.inputs {
                             if mempool_contains_txo(tx_input.prev_tx_id, tx_input.out) {
-                                println!("[network::handle_inventory_res] ERROR: tx contains outputs spent in mempool");
+                                warn!("tx contains outputs spent in mempool");
                                 return;
                             }
                         }
 
                         match add_tx_to_mempool(&tx) {
-                            Err(e) => println!("[network::handle_inventory_res] ERROR: failed to add transaction to mempool: {:?}", e),
-                            Ok(_)=>println!("Tx was successfully committed to the mempool")
+                            Err(e) => error!("failed to add transaction to mempool: {:?}", e),
+                            Ok(_) => info!("tx was successfully committed to the mempool"),
                         }
                     }
                     Inventory::Block(block) => match commit_block(&block) {
                         Ok(_) => {}
-                        Err(e) => println!(
-                            "[network::handle_inventory_res] ERROR: failed to commit block: {:?}",
-                            e
-                        ),
+                        Err(e) => error!("failed to commit block: {:?}", e),
                     },
                 }
             }
             Err(e) => {
-                println!("Failed to deserialize inventory data: {}", e);
+                error!("failed to deserialize inventory data: {:?}", e);
             }
         }
     }
 
     fn handle_chainsync_req(&mut self, message: Message) {
         let requesting_peer = if let Some(peer) = message.source {
-            println!("Received chainsync request from peer: {:?}", peer);
+            info!("received chainsync request from peer: {:?}", peer);
             peer
         } else {
-            println!(
-                "[network::handle_chainsync_req] ERROR: Received message from an unknown peer."
-            );
+            error!("received message from an unknown peer");
             return;
         };
 
         let height = match serde_json::from_slice::<u32>(&message.data) {
             Ok(h) => h,
             Err(e) => {
-                println!("Failed to deserialize height data: {}", e);
+                error!("failed to deserialize height data: {:?}", e);
                 return;
             }
         };
@@ -474,7 +457,7 @@ impl BlockchainBehaviour {
         let blocks = match get_blocks_since_height(height) {
             Ok(h) => h,
             Err(e) => {
-                println!("Failed to handle chainsync request: {}", e);
+                error!("failed to handle chainsync request: {:?}", e);
                 return;
             }
         };
@@ -483,19 +466,16 @@ impl BlockchainBehaviour {
         let payload = if let Ok(bytes) = serde_json::to_vec(&block_hashes) {
             bytes
         } else {
-            println!("[network::handle_chainsync_req] ERROR: failed to serialize block hashes");
+            error!("failed to serialize block hashes");
             return;
         };
         match self.gossipsub.publish(
             GossipTopic::ChainSyncRes(requesting_peer).to_ident_topic(),
             payload,
         ) {
-            Err(e) => println!(
-                "[network::handle_chainsync_req] ERROR: Failed to publish chainsync res: {:?}",
-                e
-            ),
-            Ok(_) => println!(
-                "Sending chainsync block hashes to peer: {:?}",
+            Err(e) => error!("failed to publish chainsync res: {:?}", e),
+            Ok(_) => info!(
+                "sending chainsync block hashes to peer: {:?}",
                 requesting_peer
             ),
         }
@@ -503,12 +483,10 @@ impl BlockchainBehaviour {
 
     fn handle_chainsync_res(&mut self, message: Message) {
         let requesting_peer = if let Some(peer) = message.source {
-            println!("Received chainsync response from peer: {:?}", peer);
+            info!("received chainsync response from peer: {:?}", peer);
             peer
         } else {
-            println!(
-                "[network::handle_chainsync_res] ERROR: Received message from an unknown peer."
-            );
+            error!("received message from an unknown peer");
             return;
         };
 
@@ -519,27 +497,20 @@ impl BlockchainBehaviour {
                     let serialized_bh = if let Ok(bytes) = serde_json::to_vec(&inventory) {
                         bytes
                     } else {
-                        println!(
-                            "[network::handle_chainsync_res] ERROR: failed to serialize inventory"
-                        );
+                        error!("failed to serialize inventory");
                         return;
                     };
                     match self.gossipsub.publish(
                         GossipTopic::InvReq(requesting_peer).to_ident_topic(),
                         serialized_bh,
                     ) {
-                       Err(e) =>  println!(
-                            "[network::handle_new_inventory] ERROR: Failed to publish new inventory: {:?}",
-                            e
-                        ),
-                        Ok(_)=> println!(
-                            "Requesting blocks from sender...",
-                        ),
+                        Err(e) => error!("failed to publish new inventory: {:?}", e),
+                        Ok(_) => info!("requesting blocks from sender...",),
                     }
                 }
             }
             Err(e) => {
-                println!("Failed to deserialize blockhash data: {}", e);
+                error!("failed to deserialize blockhash data: {}", e);
             }
         }
     }
