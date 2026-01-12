@@ -1,7 +1,8 @@
 use core_lib::{
     address::Address,
     constants::SEED_API_NODE,
-    req_types::{convert_json_to_utxoset, GetUTXORes, GetWalletBalanceRes, TxJson},
+    json_types::{convert_json_to_utxoset, TxJson},
+    req_types::{GetUTXORes, GetWalletBalanceRes, PrintBlockchainRes},
     tx::Tx,
     wallet::Wallet,
 };
@@ -115,16 +116,33 @@ pub fn handle_clear_blockchain() {
     CliUI::print_text("Blockchain data removed successfully");
 }
 
-pub fn handle_print_blockchain(show_txs: bool) {
+pub async fn handle_print_blockchain(show_txs: bool) {
     CliUI::print_header("Print Blockchain");
-    let printable_chain = unwrap_or_exit(get_blockchain_json(show_txs), "failed to get blockchain");
-    CliUI::print_text(&format!(
-        "{}",
-        unwrap_or_exit(
-            serde_json::to_string_pretty(&printable_chain),
-            "failed to print blockchain"
-        )
-    ));
+    let client = Client::new();
+
+    let url = format!("{}/chain?show_txs={}", SEED_API_NODE, show_txs);
+    match client.get(url).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                match response.json::<PrintBlockchainRes>().await {
+                    Ok(data) => {
+                        CliUI::print_json(&data);
+                    }
+                    Err(e) => {
+                        exit_with_error("failed to parse blockchain response", Some(&e));
+                    }
+                }
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                let err = format!("status code: {}, response body: {}", status, error_text);
+                exit_with_error("failed to fetch blockchain from node", Some(&err));
+            }
+        }
+        Err(e) => {
+            exit_with_error("failed to connect to node", Some(&e));
+        }
+    }
 }
 
 pub async fn handle_get_balance(req_addr: &String) {

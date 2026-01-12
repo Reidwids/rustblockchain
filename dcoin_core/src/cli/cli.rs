@@ -1,5 +1,7 @@
 use clap::{Parser, Subcommand};
 use colored::*;
+use serde::Serialize;
+use serde_json::Value;
 
 use super::handlers::{
     handle_clear_blockchain, handle_create_blockchain, handle_create_wallet, handle_get_balance,
@@ -96,7 +98,7 @@ impl Cli {
             Commands::GetWallets => handle_get_wallets(),
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),
             Commands::ClearBlockchain => handle_clear_blockchain(),
-            Commands::PrintBlockchain { show_txs } => handle_print_blockchain(*show_txs),
+            Commands::PrintBlockchain { show_txs } => handle_print_blockchain(*show_txs).await,
             Commands::GetBalance { address } => handle_get_balance(address).await,
             Commands::SendTx { to, value, from } => handle_send_tx(to, *value, from).await,
         }
@@ -117,5 +119,49 @@ impl CliUI {
     }
     pub fn print_error(text: &str) {
         eprintln!("ERROR: {}", text.red().bold());
+    }
+    pub fn print_json<T: Serialize>(value: &T) {
+        match serde_json::to_value(value) {
+            Ok(v) => Self::print_json_value(&v, 0),
+            Err(e) => Self::print_error(&format!("failed to serialize JSON: {e}")),
+        }
+    }
+    fn print_json_value(value: &Value, indent: usize) {
+        let pad = "  ".repeat(indent);
+
+        match value {
+            Value::Object(map) => {
+                println!("{}{}", pad, "{".bold());
+                for (_, (k, v)) in map.iter().enumerate() {
+                    print!("{}  {}: ", pad, format!("\"{}\"", k).blue().bold());
+                    Self::print_json_value(v, indent + 1);
+                }
+                println!("{}}}", pad);
+            }
+
+            Value::Array(arr) => {
+                println!("{}{}", pad, "[".bold());
+                for v in arr {
+                    Self::print_json_value(v, indent + 1);
+                }
+                println!("{}]", pad);
+            }
+
+            Value::String(s) => {
+                println!("{}", format!("\"{}\"", s).green());
+            }
+
+            Value::Number(n) => {
+                println!("{}", n.to_string().cyan());
+            }
+
+            Value::Bool(b) => {
+                println!("{}", b.to_string().yellow());
+            }
+
+            Value::Null => {
+                println!("{}", "null".dimmed());
+            }
+        }
     }
 }

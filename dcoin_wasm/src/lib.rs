@@ -1,7 +1,8 @@
 use core_lib::{
     address::Address,
     constants::SEED_API_NODE,
-    req_types::{GetUTXORes, TxJson, convert_json_to_utxoset},
+    json_types::{TxJson, convert_json_to_utxoset},
+    req_types::GetUTXORes,
     tx::{Tx, UTXOSet},
     wallet::Wallet,
 };

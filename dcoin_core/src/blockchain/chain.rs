@@ -1,5 +1,8 @@
-use core_lib::{address::Address, tx::Tx};
-use serde::{Deserialize, Serialize};
+use core_lib::{
+    address::Address,
+    json_types::{BlockJson, TxInputJson, TxJson, TxOutputJson},
+    tx::Tx,
+};
 use std::error::Error;
 
 use super::blocks::block::Block;
@@ -55,36 +58,6 @@ pub fn get_chain_height() -> Result<u32, Box<dyn Error>> {
     Ok(lb.height)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct BlockJson {
-    height: u32,
-    hash: String,
-    prev_hash: String,
-    timestamp: u64,
-    nonce: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    txs: Option<Vec<TxJson>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct TxJson {
-    id: String,
-    inputs: Vec<TxInputJson>,
-    outputs: Vec<TxOutputJson>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct TxInputJson {
-    prev_tx_id: String,
-    out: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct TxOutputJson {
-    value: u32,
-    pub_key_hash: String,
-}
-
 pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn Error>> {
     let mut blocks = Vec::new();
     let mut current_block = get_last_block()?;
@@ -109,6 +82,8 @@ pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn 
                                 .map(|input| TxInputJson {
                                     prev_tx_id: hex::encode(&input.prev_tx_id),
                                     out: input.out,
+                                    signature: input.signature.to_string(),
+                                    pub_key: input.pub_key.to_string(),
                                 })
                                 .collect(),
                             outputs: tx

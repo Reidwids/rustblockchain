@@ -17,7 +17,8 @@ use axum::{
 };
 use core_lib::{
     address::Address,
-    req_types::{convert_utxoset_to_json, GetUTXORes, GetWalletBalanceRes, TxJson, UTXOSetJson},
+    json_types::{convert_utxoset_to_json, TxJson, UTXOSetJson},
+    req_types::{GetUTXORes, GetWalletBalanceRes},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
