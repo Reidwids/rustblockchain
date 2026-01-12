@@ -10,6 +10,7 @@ use crate::{
     wallets::wallet::WalletStore,
 };
 use core_lib::wallet::Wallet;
+use log::{error, info};
 use tokio::{sync::mpsc::Sender, time};
 
 static MINING_LOCK: AtomicBool = AtomicBool::new(false);
@@ -18,7 +19,7 @@ pub async fn start_miner(p2p: Sender<P2Prx>, reward_address: Option<String>) {
     let wallet_store = if let Ok(w) = WalletStore::init_wallet_store() {
         w
     } else {
-        println!("[miner::handle_mine] ERROR: Failed to initialize wallet store");
+        error!("failed to initialize wallet store");
         return;
     };
 
@@ -26,24 +27,23 @@ pub async fn start_miner(p2p: Sender<P2Prx>, reward_address: Option<String>) {
         Some(addr) => match wallet_store.wallets.get(&addr) {
             Some(wallet) => wallet.clone(),
             None => {
-                println!(
-                        "[miner::handle_mine] ERROR: Mining failed - no local wallet found for given from address"
-                    );
+                error!("mining failed - no local wallet found for given from address");
                 return;
             }
         },
         None => {
-            println!("Wallet address not provided for mining, using first local wallet instead");
+            info!("wallet address not provided for mining, using first local wallet instead");
             match wallet_store.wallets.values().next() {
                 Some(wallet) => {
-                    println!(
-                        "First local wallet: {}",
+                    info!(
+                        "first local wallet: {}",
                         wallet.get_wallet_address().get_full_address()
                     );
                     wallet.clone()
                 }
                 None => {
-                    panic!("[miner::handle_mine] ERROR: No local wallets found");
+                    error!("error starting miner: no local wallets found");
+                    std::process::exit(1);
                 }
             }
         }
@@ -75,28 +75,22 @@ pub async fn handle_mine(p2p: Sender<P2Prx>, reward_wallet: Wallet) {
         return;
     }
 
-    println!("Miner: Txs found in mempool. Starting mining routine...");
+    info!("Miner: Txs found in mempool. Starting mining routine...");
     let mut new_block = match Block::new(&reward_wallet.get_wallet_address()) {
         Ok(b) => b,
         Err(e) => {
-            println!(
-                "[miner::handle_mine] ERROR: Failed to create block: {:?}",
-                e
-            );
+            error!("failed to create block: {:?}", e);
             return;
         }
     };
 
     if let Err(e) = new_block.mine() {
-        println!("[miner::handle_mine] ERROR: Failed to mine block: {:?}", e);
+        error!("failed to mine block: {:?}", e);
         return;
     }
 
     if let Err(e) = update_utxos(&new_block) {
-        println!(
-            "[miner::handle_mine] ERROR: Failed to update utxos: {:?}",
-            e
-        );
+        error!("failed to update utxos: {:?}", e);
         return;
     };
     db::delete_mempool();
@@ -105,10 +99,7 @@ pub async fn handle_mine(p2p: Sender<P2Prx>, reward_wallet: Wallet) {
         .send(P2Prx::BroadcastNewInv(NewInventory::Block(new_block.hash)))
         .await
     {
-        println!(
-            "[miner::handle_mine] ERROR: Failed to send msg to p2p server: {:?}",
-            e
-        );
+        error!("failed to send msg to p2p server: {:?}", e);
         return;
     };
 }

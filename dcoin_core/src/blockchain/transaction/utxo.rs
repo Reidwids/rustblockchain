@@ -189,9 +189,9 @@ fn delete_all_utxos() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Reindexes utxos in db. Deletes all existing and uses the chain from the db
+/// [DEPRECATED] Reindexes utxos in db. Deletes all existing and uses the chain from the db
 /// to rebuild all utxos in the db.
-pub fn reindex_utxos() -> Result<(), Box<dyn Error>> {
+pub fn _reindex_utxos() -> Result<(), Box<dyn Error>> {
     delete_all_utxos()?;
     let utxos = get_utxos_from_chain()?;
 

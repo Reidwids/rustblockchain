@@ -4,7 +4,7 @@ use crate::{
         transaction::{
             mempool::add_tx_to_mempool,
             tx::TxVerify,
-            utxo::{find_spendable_utxos, find_utxos_for_addr, reindex_utxos},
+            utxo::{find_spendable_utxos, find_utxos_for_addr},
         },
     },
     networking::p2p::network::{NewInventory, P2Prx},
@@ -20,11 +20,13 @@ use core_lib::{
     json_types::{convert_utxoset_to_json, TxJson, UTXOSetJson},
     req_types::{GetUTXORes, GetWalletBalanceRes},
 };
+use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::mpsc::Sender;
 
 pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
+    info!("http::handle_root");
     Ok(Json(json!({
         "name": "dCoin API",
         "version": "0.0.1"
@@ -34,11 +36,14 @@ pub async fn handle_root() -> Result<Json<serde_json::Value>, StatusCode> {
 pub async fn handle_health_check(
     tx: State<Sender<P2Prx>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    println!("Received health check request...");
-    println!("HTTP Channel sending msg to p2p server...");
-    tx.send(P2Prx::HealthCheck())
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    info!("http::handle_health_check");
+    debug!("sending HealthCheck message to P2P server");
+    tx.send(P2Prx::HealthCheck()).await.map_err(|e| {
+        error!("p2p service health check failed: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    info!("p2p service health check successful");
 
     Ok(Json(json!({
         "msg": "Service is healthy",
@@ -52,15 +57,14 @@ pub async fn handle_health_check(
 pub async fn handle_get_wallet_balance(
     Path(addr): Path<String>,
 ) -> Result<Json<GetWalletBalanceRes>, ErrorResponse> {
-    let wallet_addr: Address = match Address::new_from_str(&addr) {
-        Ok(addr) => addr,
-        Err(e) => {
-            return Err(ErrorResponse {
-                code: StatusCode::BAD_REQUEST.as_u16(),
-                error: e.to_string(),
-            })
+    info!("http::handle_get_wallet_balance");
+    let wallet_addr: Address = Address::new_from_str(&addr).map_err(|e| {
+        error!("failed to resolve address from request: {:?}", e);
+        ErrorResponse {
+            code: StatusCode::BAD_REQUEST.as_u16(),
+            error: e.to_string(),
         }
-    };
+    })?;
 
     let utxos = find_utxos_for_addr(wallet_addr.pub_key_hash());
 
@@ -84,26 +88,24 @@ pub struct UTXOQuery {
 pub async fn handle_get_spendable_utxos(
     Query(params): Query<UTXOQuery>,
 ) -> Result<Json<GetUTXORes>, ErrorResponse> {
-    let wallet_addr: Address = match Address::new_from_str(&params.address) {
-        Ok(addr) => addr,
-        Err(e) => {
-            return Err(ErrorResponse {
-                code: StatusCode::BAD_REQUEST.as_u16(),
-                error: e.to_string(),
-            })
+    info!("http::handle_get_spendable_utxos");
+    let wallet_addr: Address = Address::new_from_str(&params.address).map_err(|e| {
+        error!("failed to resolve address from request: {:?}", e);
+        ErrorResponse {
+            code: StatusCode::BAD_REQUEST.as_u16(),
+            error: e.to_string(),
         }
-    };
+    })?;
 
-    let spendable_utxos = match find_spendable_utxos(wallet_addr.pub_key_hash(), params.amount) {
-        Ok(map) => map,
-        Err(e) => {
-            return Err(ErrorResponse {
+    let spendable_utxos =
+        find_spendable_utxos(wallet_addr.pub_key_hash(), params.amount).map_err(|e| {
+            error!("failed to resolve spendable utxos: {:?}", e);
+            ErrorResponse {
                 // Add check for not enough funds, should be bad request
                 code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
                 error: e.to_string(),
-            });
-        }
-    };
+            }
+        })?;
 
     let utxos: UTXOSetJson = convert_utxoset_to_json(&spendable_utxos);
     Ok(Json(GetUTXORes {
@@ -119,12 +121,16 @@ pub struct ChainQuery {
 pub async fn handle_get_chain(
     Query(params): Query<ChainQuery>,
 ) -> Result<Json<serde_json::Value>, ErrorResponse> {
+    info!("http::handle_get_chain");
     match get_blockchain_json(params.show_txs.unwrap_or(false)) {
         Ok(blocks) => Ok(Json(json!(blocks))),
-        Err(e) => Err(ErrorResponse {
-            code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-            error: e.to_string(),
-        }),
+        Err(e) => {
+            error!("failed to resolve blockchain: {:?}", e);
+            Err(ErrorResponse {
+                code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                error: e.to_string(),
+            })
+        }
     }
 }
 
@@ -132,33 +138,40 @@ pub async fn handle_send_tx(
     p2p: State<Sender<P2Prx>>,
     Json(payload): Json<TxJson>,
 ) -> Result<Json<serde_json::Value>, ErrorResponse> {
-    let tx = payload.to_tx().map_err(|e| ErrorResponse {
-        code: StatusCode::BAD_REQUEST.as_u16(),
-        error: e.to_string(),
+    info!("http::handle_send_tx");
+    let tx = payload.to_tx().map_err(|e| {
+        error!("failed to marshal tx request payload: {:?}", e);
+        ErrorResponse {
+            code: StatusCode::BAD_REQUEST.as_u16(),
+            error: e.to_string(),
+        }
     })?;
 
-    //TODO: deprecate all reindex utxos
-    reindex_utxos().map_err(|e| ErrorResponse {
-        code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-        error: e.to_string(),
+    tx.verify().map_err(|e| {
+        error!("failed to verify transaction: {:?}", e);
+        ErrorResponse {
+            code: StatusCode::BAD_REQUEST.as_u16(),
+            error: e.to_string(),
+        }
     })?;
 
-    tx.verify().map_err(|e| ErrorResponse {
-        code: StatusCode::BAD_REQUEST.as_u16(),
-        error: e.to_string(),
-    })?;
-
-    add_tx_to_mempool(&tx).map_err(|e| ErrorResponse {
-        code: StatusCode::BAD_REQUEST.as_u16(),
-        error: e.to_string(),
+    add_tx_to_mempool(&tx).map_err(|e| {
+        error!("failed to add tx to mempool: {:?}", e);
+        ErrorResponse {
+            code: StatusCode::BAD_REQUEST.as_u16(),
+            error: e.to_string(),
+        }
     })?;
 
     let _ = p2p
         .send(P2Prx::BroadcastNewInv(NewInventory::Transaction(tx.id)))
         .await
-        .map_err(|e| ErrorResponse {
-            code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-            error: e.to_string(),
+        .map_err(|e| {
+            error!("p2p node failed to broadcast new inventory object: {:?}", e);
+            ErrorResponse {
+                code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                error: e.to_string(),
+            }
         })?;
 
     // Tx must be signed before receiving over http.
