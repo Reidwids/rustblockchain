@@ -17,7 +17,7 @@ use axum::{
 };
 use core_lib::{
     address::Address,
-    req_types::{convert_utxoset_to_json, GetUTXORes, TxJson, UTXOSetJson},
+    req_types::{convert_utxoset_to_json, GetUTXORes, GetWalletBalanceRes, TxJson, UTXOSetJson},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -50,7 +50,7 @@ pub async fn handle_health_check(
 
 pub async fn handle_get_wallet_balance(
     Path(addr): Path<String>,
-) -> Result<Json<serde_json::Value>, ErrorResponse> {
+) -> Result<Json<GetWalletBalanceRes>, ErrorResponse> {
     let wallet_addr: Address = match Address::new_from_str(&addr) {
         Ok(addr) => addr,
         Err(e) => {
@@ -61,12 +61,6 @@ pub async fn handle_get_wallet_balance(
         }
     };
 
-    // TODO: remove reindexing - shouldn't be required for running nodes
-    reindex_utxos().map_err(|e| ErrorResponse {
-        code: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-        error: e.to_string(),
-    })?;
-
     let utxos = find_utxos_for_addr(wallet_addr.pub_key_hash());
 
     let mut balance = 0;
@@ -75,10 +69,10 @@ pub async fn handle_get_wallet_balance(
         balance += utxo.value;
     }
 
-    Ok(Json(json!({
-        "address": addr,
-        "balance": balance
-    })))
+    Ok(Json(GetWalletBalanceRes {
+        address: addr,
+        balance: balance,
+    }))
 }
 
 #[derive(Deserialize)]

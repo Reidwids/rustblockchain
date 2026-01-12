@@ -50,6 +50,7 @@ impl Address {
         })
     }
 
+    /// New Address instance derived from the given pubkey
     pub fn new_from_key(pub_key: PublicKey) -> Self {
         let pub_key_hash = hash_pub_key(&pub_key);
         let checksum = Address::calculate_checksum(VERSION, &pub_key_hash);
@@ -61,6 +62,7 @@ impl Address {
         }
     }
 
+    /// Retrieve the pub key hash from, omitting the version and checksum
     pub fn pub_key_hash(&self) -> &[u8; 20] {
         &self.pub_key_hash
     }

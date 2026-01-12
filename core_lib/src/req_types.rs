@@ -172,3 +172,9 @@ pub struct UTXOJson {
     pub value: u32,
     pub pub_key_hash: String, // This is hex-encoded
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetWalletBalanceRes {
+    pub address: String,
+    pub balance: u32,
+}

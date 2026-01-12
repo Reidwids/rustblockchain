@@ -97,7 +97,7 @@ impl Cli {
             Commands::CreateBlockchain { address } => handle_create_blockchain(address),
             Commands::ClearBlockchain => handle_clear_blockchain(),
             Commands::PrintBlockchain { show_txs } => handle_print_blockchain(*show_txs),
-            Commands::GetBalance { address } => handle_get_balance(address),
+            Commands::GetBalance { address } => handle_get_balance(address).await,
             Commands::SendTx { to, value, from } => handle_send_tx(to, *value, from).await,
         }
     }
@@ -116,6 +116,6 @@ impl CliUI {
         println!("{}", text.white());
     }
     pub fn print_error(text: &str) {
-        eprintln!("{}", text.red().bold());
+        eprintln!("ERROR: {}", text.red().bold());
     }
 }

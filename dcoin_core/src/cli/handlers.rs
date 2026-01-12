@@ -1,7 +1,7 @@
 use core_lib::{
     address::Address,
     constants::SEED_API_NODE,
-    req_types::{convert_json_to_utxoset, GetUTXORes, TxJson},
+    req_types::{convert_json_to_utxoset, GetUTXORes, GetWalletBalanceRes, TxJson},
     tx::Tx,
     wallet::Wallet,
 };
@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use crate::{
     blockchain::{
         chain::{clear_blockchain, create_blockchain, get_blockchain_json},
-        transaction::utxo::{find_utxos_for_addr, reindex_utxos, UTXOSet},
+        transaction::utxo::UTXOSet,
     },
     cli::cli::CliUI,
     mining::miner::start_miner,
@@ -127,39 +127,64 @@ pub fn handle_print_blockchain(show_txs: bool) {
     ));
 }
 
-pub fn handle_get_balance(req_addr: &String) {
+pub async fn handle_get_balance(req_addr: &String) {
     CliUI::print_header("Get Balance");
-    // TODO: Refactor to be an API call
+    let client = Client::new();
+
     let address = unwrap_or_exit(
         Address::new_from_str(req_addr),
         "failed to parse address from request",
     );
-    unwrap_or_exit(reindex_utxos(), "failed to reindex utxos");
 
-    let utxos = find_utxos_for_addr(address.pub_key_hash());
+    let url = format!(
+        "{}/wallet/balance/{}",
+        SEED_API_NODE,
+        address.get_full_address(),
+    );
 
-    let mut balance = 0;
-
-    for utxo in utxos {
-        balance += utxo.value;
+    match client.get(url).send().await {
+        Ok(response) => {
+            if response.status().is_success() {
+                match response.json::<GetWalletBalanceRes>().await {
+                    Ok(data) => {
+                        CliUI::print_kv("Address", &data.address);
+                        CliUI::print_kv("Balance", &data.balance.to_string());
+                    }
+                    Err(e) => {
+                        exit_with_error("failed to parse wallet balance response", Some(&e));
+                    }
+                }
+            } else {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                let err = format!("status code: {}, response body: {}", status, error_text);
+                exit_with_error("failed to fetch wallet balance from node", Some(&err));
+            }
+        }
+        Err(e) => {
+            exit_with_error("failed to connect to node", Some(&e));
+        }
     }
-
-    CliUI::print_kv("Address", req_addr);
-    CliUI::print_kv("Balance", &format!("{}", balance));
 }
 
 pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>) {
     CliUI::print_header("Send Transaction");
     let client = Client::new();
 
-    let wallet_store = WalletStore::init_wallet_store()
-        .expect("[WalletStore::init_wallet_store] Failed to initialize wallet store");
+    let wallet_store = unwrap_or_exit(
+        WalletStore::init_wallet_store(),
+        "failed to initialize wallet store",
+    );
     let from_wallet: &Wallet;
     match from {
         Some(addr) => {
-            from_wallet = wallet_store.wallets.get(addr).expect(
-                "[handlers::handle_send_tx] ERROR: No local wallet found for given from address",
-            );
+            from_wallet = match wallet_store.wallets.get(addr) {
+                Some(w) => w,
+                None => {
+                    CliUI::print_error("No local wallet found for given from address");
+                    std::process::exit(1);
+                }
+            }
         }
         None => {
             let first_wallet = wallet_store.wallets.iter().next();
@@ -172,7 +197,7 @@ pub async fn handle_send_tx(to: &String, value: u32, from: &Option<String>) {
                         &format!("{}", from_wallet.get_wallet_address().get_full_address()),
                     );
                 }
-                None => exit_with_error("No local wallets found", None),
+                None => exit_with_error("no local wallets found", None),
             }
         }
     }
