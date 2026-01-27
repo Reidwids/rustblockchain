@@ -6,12 +6,13 @@ use core_lib::{
     tx::Tx,
     wallet::Wallet,
 };
+use log::error;
 use reqwest::Client;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     blockchain::{
-        chain::{clear_blockchain, create_blockchain, get_blockchain_json},
+        chain::{clear_blockchain, create_blockchain},
         transaction::utxo::UTXOSet,
     },
     cli::cli::CliUI,
@@ -34,10 +35,18 @@ pub async fn handle_start_node(
 ) {
     // Create a channel to pass messages from the server to the p2p network
     let (tx, rx) = mpsc::channel(32);
+    // Create a readiness channel
+    let (ready_tx, ready_rx) = oneshot::channel();
 
     // Spawn the P2P network task
     let p2p_port = p2p_port.unwrap_or(4001);
-    tokio::spawn(start_p2p_network(rx, p2p_port));
+    tokio::spawn(start_p2p_network(rx, ready_tx, p2p_port));
+
+    // Wait for P2P readiness
+    if ready_rx.await.is_err() {
+        error!("P2P failed to signal readiness, aborting startup");
+        return;
+    }
 
     // Start the miner if requested on startup
     if mine {

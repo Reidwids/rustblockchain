@@ -22,6 +22,7 @@ mod networking {
     pub mod p2p {
         pub mod handlers;
         pub mod network;
+        pub mod seed_nodes;
     }
     pub mod server {
         pub mod handlers;
