@@ -31,8 +31,10 @@ mod networking {
 }
 mod cli {
     pub mod cli;
-    pub mod db;
     pub mod handlers;
+}
+mod db {
+    pub mod rocks;
 }
 mod mining {
     pub mod miner;

@@ -11,7 +11,7 @@ use crate::{
         blocks::orphan::{check_for_valid_orphan_blocks, check_orphans_for_longest_chain},
         transaction::{mempool::update_mempool, utxo::update_utxos},
     },
-    cli::db::{
+    db::rocks::{
         self, blockchain_exists, delete_all_blocks, delete_all_orphan_blocks, delete_all_utxos,
         delete_last_hash, delete_mempool, get_block, get_last_hash, put_block, put_last_hash,
         put_orphan_block, remove_from_orphan_blocks,
@@ -22,7 +22,7 @@ use hex;
 /// Initializes the blockchain, and fails if a blockchain already exists
 pub fn create_blockchain(addr: &Address) -> Result<(), Box<dyn Error>> {
     if blockchain_exists() {
-        panic!("[chain::create_blockchain] ERROR: Blockchain already exists");
+        panic!("blockchain already exists");
     }
 
     let mut genesis_block = Block::genesis(addr)?;
@@ -41,7 +41,7 @@ pub fn clear_blockchain() {
 
 pub fn get_last_block() -> Result<Block, Box<dyn Error>> {
     let lh: [u8; 32] = get_last_hash()?;
-    let block = db::get_block(&lh)
+    let block = rocks::get_block(&lh)
         .map_err(|e| {
             format!(
                 "[block::get_last_block] ERROR: Could not get last block {:?}",
@@ -122,8 +122,8 @@ pub fn get_blockchain_json(include_txs: bool) -> Result<Vec<BlockJson>, Box<dyn 
 }
 
 pub fn get_tx_from_chain(tx_id: [u8; 32]) -> Result<Tx, Box<dyn Error>> {
-    let last_hash = db::get_last_hash()?;
-    let mut current_block = db::get_block(&last_hash)?.ok_or_else(|| {
+    let last_hash = rocks::get_last_hash()?;
+    let mut current_block = rocks::get_block(&last_hash)?.ok_or_else(|| {
         format!(
             "[chain::find_tx_in_chain] ERROR: Could not find block from last hash {:?}",
             last_hash
@@ -141,7 +141,7 @@ pub fn get_tx_from_chain(tx_id: [u8; 32]) -> Result<Tx, Box<dyn Error>> {
             break;
         }
         // Otherwise, get the next block
-        current_block = db::get_block(&current_block.prev_hash)?.ok_or_else(|| {
+        current_block = rocks::get_block(&current_block.prev_hash)?.ok_or_else(|| {
             format!(
                 "[chain::find_tx_in_chain] ERROR: Could not find next block {:?}",
                 current_block.prev_hash

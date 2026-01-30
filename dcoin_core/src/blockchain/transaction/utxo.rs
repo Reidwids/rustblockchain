@@ -5,7 +5,7 @@ use rocksdb::IteratorMode;
 
 use crate::{
     blockchain::blocks::block::Block,
-    cli::db::{self, utxo_cf, ROCKS_DB},
+    db::rocks::{self, utxo_cf, ROCKS_DB},
 };
 
 use super::mempool::mempool_contains_txo;
@@ -114,8 +114,8 @@ fn get_utxos_from_chain() -> Result<UTXOSet, Box<dyn Error>> {
     let mut spent_txo_map: HashMap<[u8; 32], Vec<u32>> = HashMap::new();
 
     // Get most recent block
-    let last_hash = db::get_last_hash()?;
-    let mut current_block = db::get_block(&last_hash)?.ok_or_else(|| {
+    let last_hash = rocks::get_last_hash()?;
+    let mut current_block = rocks::get_block(&last_hash)?.ok_or_else(|| {
         format!(
             "[utxo::get_utxos_from_chain] ERROR: Could not find block from last hash {:?}",
             last_hash
@@ -159,7 +159,7 @@ fn get_utxos_from_chain() -> Result<UTXOSet, Box<dyn Error>> {
             break;
         }
         // Otherwise, get the next block
-        current_block = db::get_block(&current_block.prev_hash)?.ok_or_else(|| {
+        current_block = rocks::get_block(&current_block.prev_hash)?.ok_or_else(|| {
             format!(
                 "[utxo::get_utxos_from_chain] ERROR: Could not find next block {:?}",
                 current_block.prev_hash
@@ -198,7 +198,7 @@ pub fn _reindex_utxos() -> Result<(), Box<dyn Error>> {
     // Loop through all retrieved utxos and add them to the db with utxo prefix
     for (tx_id, txo_map) in utxos {
         for (out_idx, txo) in txo_map {
-            db::put_utxo(&tx_id, out_idx, &txo)?;
+            rocks::put_utxo(&tx_id, out_idx, &txo)?;
         }
     }
 
@@ -211,7 +211,7 @@ pub fn update_utxos(block: &Block) -> Result<(), Box<dyn Error>> {
         if !tx.is_coinbase() {
             for tx_in in &tx.inputs {
                 // Remove any outputs now spent by a given tx input
-                db::delete_utxo(&tx_in.prev_tx_id, tx_in.out)?;
+                rocks::delete_utxo(&tx_in.prev_tx_id, tx_in.out)?;
             }
         }
 
@@ -220,7 +220,7 @@ pub fn update_utxos(block: &Block) -> Result<(), Box<dyn Error>> {
             let out_idx = out_idx
                 .try_into()
                 .expect("[utxo::update_utxos] ERROR: Index too large for u32");
-            db::put_utxo(&tx.id, out_idx, tx_out)?;
+            rocks::put_utxo(&tx.id, out_idx, tx_out)?;
         }
     }
     Ok(())

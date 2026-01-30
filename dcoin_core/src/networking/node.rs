@@ -1,4 +1,4 @@
-use crate::cli::db::ROCKS_DB;
+use crate::db::rocks::ROCKS_DB;
 use libp2p::{identity, PeerId};
 
 pub const NODE_KEY: &str = "node_id";

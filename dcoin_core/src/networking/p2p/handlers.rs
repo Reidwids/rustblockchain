@@ -29,7 +29,7 @@ use crate::{
             tx::TxVerify,
         },
     },
-    cli::db::{get_block, utxo_set_contains_tx},
+    db::rocks::{get_block, utxo_set_contains_tx},
     networking::node::Node,
 };
 

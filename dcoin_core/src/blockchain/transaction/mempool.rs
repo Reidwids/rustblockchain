@@ -2,7 +2,7 @@ use core_lib::tx::Tx;
 
 use crate::{
     blockchain::blocks::block::Block,
-    cli::db::{self, get_mempool},
+    db::rocks::{self, get_mempool},
 };
 
 use std::{collections::HashMap, error::Error};
@@ -46,7 +46,7 @@ pub fn add_tx_to_mempool(tx: &Tx) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    db::put_mempool(&tx);
+    rocks::put_mempool(&tx);
     Ok(())
 }
 
@@ -74,6 +74,6 @@ pub fn update_mempool(block: &Block) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    db::remove_txs_from_mempool(tx_ids_to_remove);
+    rocks::remove_txs_from_mempool(tx_ids_to_remove);
     Ok(())
 }

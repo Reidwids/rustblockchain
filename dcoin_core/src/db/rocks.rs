@@ -188,8 +188,6 @@ pub fn delete_all_blocks() {
     let _ = ROCKS_DB.delete_range_cf(block_cf(), b"", b"");
 }
 
-/*** Last Hash DB handlers ***/
-
 pub fn blockchain_exists() -> bool {
     ROCKS_DB
         .get(LAST_HASH_KEY.as_bytes())

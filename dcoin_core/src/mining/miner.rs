@@ -5,8 +5,8 @@ use std::{
 
 use crate::{
     blockchain::{blocks::block::Block, transaction::utxo::update_utxos},
-    cli::db,
-    networking::p2p::network::{NewInventory, P2Prx},
+    db::rocks,
+    networking::p2p::{handlers::NewInventory, network::P2Prx},
     wallets::wallet::WalletStore,
 };
 use core_lib::wallet::Wallet;
@@ -70,7 +70,7 @@ pub async fn start_miner(p2p: Sender<P2Prx>, reward_address: Option<String>) {
 
 pub async fn handle_mine(p2p: Sender<P2Prx>, reward_wallet: Wallet) {
     // Fail fast if there are no txs in the mempool
-    let mempool = db::get_mempool();
+    let mempool = rocks::get_mempool();
     if mempool.len() == 0 {
         return;
     }
@@ -93,10 +93,12 @@ pub async fn handle_mine(p2p: Sender<P2Prx>, reward_wallet: Wallet) {
         error!("failed to update utxos: {:?}", e);
         return;
     };
-    db::delete_mempool();
+    rocks::delete_mempool();
 
     if let Err(e) = p2p
-        .send(P2Prx::BroadcastNewInv(NewInventory::Block(new_block.hash)))
+        .send(P2Prx::BroadcastNewInv(NewInventory::BlockID(
+            new_block.hash,
+        )))
         .await
     {
         error!("failed to send msg to p2p server: {:?}", e);

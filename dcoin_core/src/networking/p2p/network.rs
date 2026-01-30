@@ -9,7 +9,10 @@ use std::{
     str::FromStr,
     time::{Duration, Instant},
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::{sleep_until, Instant as TokioInstant},
+};
 
 use crate::networking::{
     node::Node,
@@ -37,11 +40,14 @@ pub async fn start_p2p_network(
     let node = Node::get_or_create_keys();
     let p2p_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
     let mut state: NodeState = NodeState::Discovering(DiscoveringState {
-        deadline: Instant::now() + Duration::from_secs(MAX_BOOTSTRAP_TIME),
-        found_chain: false,
         peer_count: 0,
         is_boostrapped: false,
     });
+
+    // Create bootstrap deadline
+    let deadline = Instant::now() + Duration::from_secs(MAX_BOOTSTRAP_TIME);
+    let sleep = sleep_until(TokioInstant::from_std(deadline));
+    tokio::pin!(sleep);
 
     // Build swarm with blockchain behaviour
     let mut swarm = SwarmBuilder::with_existing_identity(node.get_priv_key().clone())
@@ -97,15 +103,26 @@ pub async fn start_p2p_network(
                     }
                 }
             }
+
+            _ = &mut sleep => {
+                if let NodeState::Discovering(s) = &state {
+                    warn!("not enough peers found to bootstrap chain: node discovery found {} peers", s.peer_count);
+                    if chain_exists {
+                        panic!()
+                    }
+
+                    create_genesis_block();
+                    state = NodeState::Running(RunningState);
+                    send_api_tx();
+                }
+            }
         }
     }
 }
 
 #[derive(Debug)]
 struct DiscoveringState {
-    deadline: Instant,
     peer_count: u64,
-    found_chain: bool,
     is_boostrapped: bool,
 }
 impl DiscoveringState {
@@ -135,16 +152,16 @@ impl DiscoveringState {
                                 }
                             }
                         }
-                        return None;
+                        None
                     }
-                    _ => return None,
+                    _ => None,
                 }
             }
 
             // Listen address events (original functionality)
             SwarmEvent::NewListenAddr { address, .. } => {
                 info!("listening for p2p events on address {}", address);
-                return None;
+                None
             }
 
             // Connection established events - add peer to Kademlia
@@ -157,18 +174,10 @@ impl DiscoveringState {
                 swarm
                     .behaviour_mut()
                     .add_peer_to_kademlia(&peer_id, endpoint.get_remote_address().clone());
-                return None;
+                None
             }
-            _ => {}
+            _ => None,
         }
-
-        if Instant::now() > self.deadline {
-            info!("No chain discovered — creating genesis");
-            create_genesis_block();
-            send_api_tx();
-            return Some(NodeState::Running(RunningState));
-        }
-        None
     }
 }
 

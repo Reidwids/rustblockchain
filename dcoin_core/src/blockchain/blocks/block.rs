@@ -12,7 +12,7 @@ use crate::{
         merkle::MerkleTree,
         transaction::tx::{coinbase_tx, TxVerify, COINBASE_REWARD},
     },
-    cli::db::{self, get_block, get_last_hash},
+    db::rocks::{self, get_block, get_last_hash},
 };
 use core_lib::{address::Address, tx::Tx};
 use hex;
@@ -56,7 +56,7 @@ impl Block {
     pub fn new(reward_addr: &Address) -> Result<Self, Box<dyn Error>> {
         let cbtx = coinbase_tx(reward_addr)?;
         let prev_block = get_last_block()?;
-        let txs: Vec<Tx> = db::get_mempool().values().cloned().collect();
+        let txs: Vec<Tx> = rocks::get_mempool().values().cloned().collect();
         let mut all_txs = Vec::with_capacity(txs.len() + 1);
         all_txs.push(cbtx); // Add coinbase first
         all_txs.extend_from_slice(&txs); // Add the rest of the transactions
@@ -117,8 +117,8 @@ impl Block {
         // Prepare block for db
         let block_hash = self.hash()?;
         // Store block ref and last hash
-        db::put_block(self);
-        db::put_last_hash(&block_hash);
+        rocks::put_block(self);
+        rocks::put_last_hash(&block_hash);
         Ok(())
     }
 

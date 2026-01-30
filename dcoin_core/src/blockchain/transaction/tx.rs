@@ -4,7 +4,7 @@ use secp256k1::rand::RngCore;
 use secp256k1::{rand, Message, PublicKey, Secp256k1, SecretKey};
 use std::error::Error;
 
-use crate::cli::db::get_utxo;
+use crate::db::rocks::get_utxo;
 
 /** Constants **/
 pub const COINBASE_REWARD: u32 = 100;
