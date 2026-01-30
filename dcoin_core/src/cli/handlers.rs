@@ -21,6 +21,8 @@ use crate::{
     wallets::wallet::WalletStore,
 };
 
+const DEFAULT_P2P_PORT: u16 = 4001;
+
 pub fn handle_get_node_id() {
     CliUI::print_header("Get Node ID");
     let node = Node::get_or_create_keys();
@@ -39,7 +41,7 @@ pub async fn handle_start_node(
     let (ready_tx, ready_rx) = oneshot::channel();
 
     // Spawn the P2P network task
-    let p2p_port = p2p_port.unwrap_or(4001);
+    let p2p_port = p2p_port.unwrap_or(DEFAULT_P2P_PORT);
     tokio::spawn(start_p2p_network(rx, ready_tx, p2p_port));
 
     // Wait for P2P readiness

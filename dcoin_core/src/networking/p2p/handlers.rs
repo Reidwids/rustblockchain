@@ -186,7 +186,7 @@ impl BlockchainBehaviour {
         Ok(())
     }
 
-    pub fn handle_new_inventory(&mut self, message: Message) {
+    pub fn handle_new_inventory(&mut self, message: &Message) {
         info!("received inventory message from network");
         let requesting_peer = if let Some(peer) = message.source {
             peer
@@ -202,7 +202,7 @@ impl BlockchainBehaviour {
                     {
                         match self.gossipsub.publish(
                             GossipTopic::InvReq(requesting_peer).to_ident_topic(),
-                            message.data,
+                            message.data.clone(),
                         ) {
                             Err(e) => error!("failed to publish inventory request: {:?}", e),
                             Ok(_) => {
@@ -215,7 +215,7 @@ impl BlockchainBehaviour {
                     Ok(None) => {
                         match self.gossipsub.publish(
                             GossipTopic::InvReq(requesting_peer).to_ident_topic(),
-                            message.data,
+                            message.data.clone(),
                         ) {
                             Err(e) => error!("failed to publish inventory request: {:?}", e),
                             Ok(_) => {
@@ -234,7 +234,7 @@ impl BlockchainBehaviour {
     }
 
     // Handle received inventory message
-    pub fn handle_inventory_req(&mut self, message: Message) {
+    pub fn handle_inventory_req(&mut self, message: &Message) {
         let requesting_peer = if let Some(peer) = message.source {
             info!("received inventory request from peer: {:?}", peer);
             peer
@@ -301,7 +301,7 @@ impl BlockchainBehaviour {
         }
     }
 
-    pub fn handle_inventory_res(&mut self, message: Message) {
+    pub fn handle_inventory_res(&mut self, message: &Message) {
         info!("inventory record successfully retrieved");
         match serde_json::from_slice::<Inventory>(&message.data) {
             Ok(inv) => {
@@ -345,7 +345,7 @@ impl BlockchainBehaviour {
         }
     }
 
-    pub fn handle_chainsync_req(&mut self, message: Message) {
+    pub fn handle_chainsync_req(&mut self, message: &Message) {
         let requesting_peer = if let Some(peer) = message.source {
             info!("received chainsync request from peer: {:?}", peer);
             peer
@@ -389,7 +389,7 @@ impl BlockchainBehaviour {
         }
     }
 
-    pub fn handle_chainsync_res(&mut self, message: Message) {
+    pub fn handle_chainsync_res(&mut self, message: &Message) {
         let requesting_peer = if let Some(peer) = message.source {
             info!("received chainsync response from peer: {:?}", peer);
             peer

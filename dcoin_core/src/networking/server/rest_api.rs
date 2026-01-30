@@ -14,9 +14,11 @@ use super::handlers::{
     handle_root, handle_send_tx,
 };
 
+const DEFAULT_API_PORT: u16 = 3000;
+
 pub async fn start_rest_api(tx: Sender<P2Prx>, port: Option<u16>) {
     // Start the HTTP server
-    let port = port.unwrap_or(3000);
+    let port = port.unwrap_or(DEFAULT_API_PORT);
     let addr = format!("0.0.0.0:{}", port);
     let router = create_router(tx.clone());
     let listener = TcpListener::bind(&addr).await.unwrap();

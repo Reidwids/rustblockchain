@@ -7,7 +7,7 @@ use crate::{
             utxo::{find_spendable_utxos, find_utxos_for_addr},
         },
     },
-    networking::p2p::network::{NewInventory, P2Prx},
+    networking::p2p::{handlers::NewInventory, network::P2Prx},
 };
 
 use axum::{
@@ -164,7 +164,7 @@ pub async fn handle_send_tx(
     })?;
 
     let _ = p2p
-        .send(P2Prx::BroadcastNewInv(NewInventory::Transaction(tx.id)))
+        .send(P2Prx::BroadcastNewInv(NewInventory::TransactionID(tx.id)))
         .await
         .map_err(|e| {
             error!("p2p node failed to broadcast new inventory object: {:?}", e);

@@ -14,14 +14,19 @@ use tokio::{
     time::{sleep_until, Instant as TokioInstant},
 };
 
-use crate::networking::{
-    node::Node,
-    p2p::{
-        handlers::{
-            BlockchainBehaviour, BlockchainBehaviourEvent, NewInventory, CHAIN_SYNC_REQ_TOPIC,
+use crate::{
+    blockchain::chain::create_blockchain,
+    db::rocks::blockchain_exists,
+    networking::{
+        node::Node,
+        p2p::{
+            handlers::{
+                BlockchainBehaviour, BlockchainBehaviourEvent, NewInventory, CHAIN_SYNC_REQ_TOPIC,
+            },
+            seed_nodes::get_seed_nodes,
         },
-        seed_nodes::get_seed_nodes,
     },
+    wallets::wallet::WalletStore,
 };
 
 const MIN_BOOTSTRAP_PEERS: u64 = 1;
@@ -39,6 +44,8 @@ pub async fn start_p2p_network(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let node = Node::get_or_create_keys();
     let p2p_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/{}", port).parse().unwrap();
+    let mut ready_tx = Some(ready_tx);
+
     let mut state: NodeState = NodeState::Discovering(DiscoveringState {
         peer_count: 0,
         is_boostrapped: false,
@@ -77,7 +84,6 @@ pub async fn start_p2p_network(
     }
 
     info!("P2P network successfully initialized");
-    // let _ = ready_tx.send(());
 
     // Main event loop
     loop {
@@ -107,13 +113,27 @@ pub async fn start_p2p_network(
             _ = &mut sleep => {
                 if let NodeState::Discovering(s) = &state {
                     warn!("not enough peers found to bootstrap chain: node discovery found {} peers", s.peer_count);
-                    if chain_exists {
-                        panic!()
+
+                    if blockchain_exists() {
+                        panic!("blockchain already exists, must successfully complete bootstrap");
                     }
 
-                    create_genesis_block();
+                    info!("creating new chain...");
+                    let mut wallet_store = WalletStore::init_wallet_store()
+                        .unwrap_or_else(|e| panic!("failed to initialize wallet store: {e}"));
+
+                    let address = wallet_store.add_wallet()
+                        .unwrap_or_else(|e| panic!("failed to add wallet for blockchain rewards: {e}"));
+
+                    info!("created new local wallet to receive genesis mining rewards: {}", address.get_full_address().as_str());
+                    create_blockchain(&address);
+
+                    // Boostrap did not succeed, start app as initial network node
+                    info!("chain initialized. Starting app as initial network node...");
                     state = NodeState::Running(RunningState);
-                    send_api_tx();
+                    if let Some(tx) = ready_tx.take() {
+                        let _ = tx.send(());
+                    }
                 }
             }
         }
@@ -226,6 +246,7 @@ impl SyncingState {
             SwarmEvent::Behaviour(BlockchainBehaviourEvent::Gossipsub(
                 gossipsub::Event::Message { message, .. },
             )) => {
+                let node = Node::get_or_create_keys();
                 let topic_str = message.topic.to_string();
 
                 // --- HANDLERS FOR ALL DIRECT MSGS --- //
@@ -235,9 +256,10 @@ impl SyncingState {
                     if parts.len() < 3 {
                         warn!("received invalid direct message: {}", topic_str);
                     }
-                    let target_peer_id = parts[1];
+                    let target_peer_id =
+                        PeerId::from_str(parts[1]).expect("could not parse peer_id");
                     // Check if this message is meant for us
-                    if PeerId::from_str(target_peer_id)? == node.get_peer_id().clone() {
+                    if target_peer_id == node.get_peer_id().clone() {
                         match parts[2] {
                             // Once we get the final tip, we can send to the next stage
                             INV_REQ_TOPIC => swarm.behaviour_mut().handle_inventory_req(message),
@@ -265,7 +287,7 @@ impl SyncingState {
         }
         if !self.init {
             info!("Requesting Chainsync");
-            send_chainsync_msg();
+            // send_chainsync_msg();
         }
         None
     }
